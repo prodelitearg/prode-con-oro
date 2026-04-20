@@ -293,6 +293,17 @@ export type Database = {
         }
         Returns: boolean
       }
+      tournament_leaderboard: {
+        Args: { _tournament_id: string }
+        Returns: {
+          accuracy: number
+          display_name: string
+          exact_hits: number
+          played: number
+          total_points: number
+          user_id: string
+        }[]
+      }
     }
     Enums: {
       app_role: "user" | "admin" | "superadmin"
