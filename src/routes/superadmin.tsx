@@ -237,6 +237,19 @@ function Torneos() {
     if (selTour) void reloadMatchdays(selTour);
   };
 
+  const closeMatchday = async (md: Matchday) => {
+    if (!confirm(`Cerrar fecha ${md.number} y distribuir el pozo? Esta acción es irreversible.`)) return;
+    const { data, error } = await supabase.rpc("close_matchday", { _matchday_id: md.id });
+    if (error) return toast.error(error.message);
+    const r = (data ?? {}) as Record<string, number>;
+    toast.success(
+      `Fecha cerrada · ${r.players} jugadores · Recaudado ${r.total_collected} cr · ` +
+      `Top5: ${r.top_total_distributed}/${(r.top_pool ?? 0) + (r.carry_in ?? 0)} cr` +
+      (r.carried_to_next > 0 ? ` · Acumulado a próxima: ${r.carried_to_next} cr` : "")
+    );
+    if (selTour) void reloadMatchdays(selTour);
+  };
+
   // ---------- Crear partido ----------
   const [mHome, setMHome] = useState(""); const [mHomeShort, setMHomeShort] = useState(""); const [mHomeColor, setMHomeColor] = useState("#1e293b");
   const [mAway, setMAway] = useState(""); const [mAwayShort, setMAwayShort] = useState(""); const [mAwayColor, setMAwayColor] = useState("#1e293b");
