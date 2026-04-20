@@ -147,7 +147,7 @@ function Admins() {
 }
 
 interface Tournament { id: string; name: string; country: string | null; is_active: boolean }
-interface Matchday { id: string; tournament_id: string; number: number; starts_at: string; entry_cost: number; prize_pool: number; is_open: boolean }
+interface Matchday { id: string; tournament_id: string; number: number; starts_at: string; entry_cost: number; prize_pool: number; is_open: boolean; closed_at: string | null; pot_carry: number }
 interface Match { id: string; matchday_id: string; home_team: string; home_short: string; home_color: string; away_team: string; away_short: string; away_color: string; kickoff: string; home_score: number | null; away_score: number | null; status: string }
 
 function Torneos() {
