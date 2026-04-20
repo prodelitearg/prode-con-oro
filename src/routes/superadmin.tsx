@@ -147,7 +147,7 @@ function Admins() {
 }
 
 interface Tournament { id: string; name: string; country: string | null; is_active: boolean }
-interface Matchday { id: string; tournament_id: string; number: number; starts_at: string; entry_cost: number; prize_pool: number; is_open: boolean }
+interface Matchday { id: string; tournament_id: string; number: number; starts_at: string; entry_cost: number; prize_pool: number; is_open: boolean; closed_at: string | null; pot_carry: number }
 interface Match { id: string; matchday_id: string; home_team: string; home_short: string; home_color: string; away_team: string; away_short: string; away_color: string; kickoff: string; home_score: number | null; away_score: number | null; status: string }
 
 function Torneos() {
@@ -237,6 +237,19 @@ function Torneos() {
     if (selTour) void reloadMatchdays(selTour);
   };
 
+  const closeMatchday = async (md: Matchday) => {
+    if (!confirm(`Cerrar fecha ${md.number} y distribuir el pozo? Esta acción es irreversible.`)) return;
+    const { data, error } = await supabase.rpc("close_matchday", { _matchday_id: md.id });
+    if (error) return toast.error(error.message);
+    const r = (data ?? {}) as Record<string, number>;
+    toast.success(
+      `Fecha cerrada · ${r.players} jugadores · Recaudado ${r.total_collected} cr · ` +
+      `Top5: ${r.top_total_distributed}/${(r.top_pool ?? 0) + (r.carry_in ?? 0)} cr` +
+      (r.carried_to_next > 0 ? ` · Acumulado a próxima: ${r.carried_to_next} cr` : "")
+    );
+    if (selTour) void reloadMatchdays(selTour);
+  };
+
   // ---------- Crear partido ----------
   const [mHome, setMHome] = useState(""); const [mHomeShort, setMHomeShort] = useState(""); const [mHomeColor, setMHomeColor] = useState("#1e293b");
   const [mAway, setMAway] = useState(""); const [mAwayShort, setMAwayShort] = useState(""); const [mAwayColor, setMAwayColor] = useState("#1e293b");
@@ -308,13 +321,20 @@ function Torneos() {
           </form>
           {matchdays.length === 0 && <div className="text-sm text-muted-foreground mb-2">Sin fechas todavía.</div>}
           {matchdays.map((md) => (
-            <div key={md.id} className={`card-base flex items-center justify-between mb-2 !py-3 ${selMd === md.id ? "border-primary/60" : ""}`}>
+            <div key={md.id} className={`card-base flex items-center justify-between mb-2 !py-3 gap-2 ${selMd === md.id ? "border-primary/60" : ""}`}>
               <button type="button" onClick={() => setSelMd(selMd === md.id ? null : md.id)} className="text-left flex-1">
-                <div className="text-sm font-bold text-foreground">Fecha {md.number}</div>
+                <div className="text-sm font-bold text-foreground flex items-center gap-2">
+                  Fecha {md.number}
+                  {md.closed_at ? <span className="tag tag-success">Cerrada</span> : <span className="tag">Abierta</span>}
+                  {md.pot_carry > 0 && <span className="tag tag-gold">+{md.pot_carry} cr acum.</span>}
+                </div>
                 <div className="text-[0.7rem] text-muted-foreground mt-0.5">
                   {new Date(md.starts_at).toLocaleString("es-AR")} · Entrada {md.entry_cost} cr · Pozo {md.prize_pool} cr
                 </div>
               </button>
+              {!md.closed_at && (
+                <button type="button" className="btn-mini" onClick={() => closeMatchday(md)}>Cerrar</button>
+              )}
               <button type="button" className="btn-mini is-danger" onClick={() => deleteMatchday(md)}>Eliminar</button>
             </div>
           ))}

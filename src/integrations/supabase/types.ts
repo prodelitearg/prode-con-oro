@@ -14,33 +14,112 @@ export type Database = {
   }
   public: {
     Tables: {
+      matchday_commissions: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          kind: string
+          matchday_id: string
+          recipient_user_id: string | null
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          id?: string
+          kind: string
+          matchday_id: string
+          recipient_user_id?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          kind?: string
+          matchday_id?: string
+          recipient_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "matchday_commissions_matchday_id_fkey"
+            columns: ["matchday_id"]
+            isOneToOne: false
+            referencedRelation: "matchdays"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      matchday_payouts: {
+        Row: {
+          base_prize: number
+          created_at: string
+          id: string
+          matchday_id: string
+          rank_position: number | null
+          ranking_prize: number
+          user_id: string
+        }
+        Insert: {
+          base_prize?: number
+          created_at?: string
+          id?: string
+          matchday_id: string
+          rank_position?: number | null
+          ranking_prize?: number
+          user_id: string
+        }
+        Update: {
+          base_prize?: number
+          created_at?: string
+          id?: string
+          matchday_id?: string
+          rank_position?: number | null
+          ranking_prize?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "matchday_payouts_matchday_id_fkey"
+            columns: ["matchday_id"]
+            isOneToOne: false
+            referencedRelation: "matchdays"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       matchdays: {
         Row: {
+          closed_at: string | null
           created_at: string
           entry_cost: number
           id: string
           is_open: boolean
           number: number
+          pot_carry: number
           prize_pool: number
           starts_at: string
           tournament_id: string
         }
         Insert: {
+          closed_at?: string | null
           created_at?: string
           entry_cost?: number
           id?: string
           is_open?: boolean
           number: number
+          pot_carry?: number
           prize_pool?: number
           starts_at: string
           tournament_id: string
         }
         Update: {
+          closed_at?: string | null
           created_at?: string
           entry_cost?: number
           id?: string
           is_open?: boolean
           number?: number
+          pot_carry?: number
           prize_pool?: number
           starts_at?: string
           tournament_id?: string
@@ -286,6 +365,7 @@ export type Database = {
         }
         Returns: number
       }
+      close_matchday: { Args: { _matchday_id: string }; Returns: Json }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
