@@ -277,6 +277,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      calculate_prediction_points: {
+        Args: {
+          pred_away: number
+          pred_home: number
+          real_away: number
+          real_home: number
+        }
+        Returns: number
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
