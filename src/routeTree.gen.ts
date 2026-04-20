@@ -9,38 +9,220 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SuperadminRouteImport } from './routes/superadmin'
+import { Route as RegisterRouteImport } from './routes/register'
+import { Route as LoginAdminRouteImport } from './routes/login-admin'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as AppRouteImport } from './routes/app'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppIndexRouteImport } from './routes/app.index'
+import { Route as AppTablaRouteImport } from './routes/app.tabla'
+import { Route as AppPerfilRouteImport } from './routes/app.perfil'
+import { Route as AppPartidosRouteImport } from './routes/app.partidos'
+import { Route as AppCreditosRouteImport } from './routes/app.creditos'
 
+const SuperadminRoute = SuperadminRouteImport.update({
+  id: '/superadmin',
+  path: '/superadmin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RegisterRoute = RegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginAdminRoute = LoginAdminRouteImport.update({
+  id: '/login-admin',
+  path: '/login-admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppRoute = AppRouteImport.update({
+  id: '/app',
+  path: '/app',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppIndexRoute = AppIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppTablaRoute = AppTablaRouteImport.update({
+  id: '/tabla',
+  path: '/tabla',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPerfilRoute = AppPerfilRouteImport.update({
+  id: '/perfil',
+  path: '/perfil',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPartidosRoute = AppPartidosRouteImport.update({
+  id: '/partidos',
+  path: '/partidos',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppCreditosRoute = AppCreditosRouteImport.update({
+  id: '/creditos',
+  path: '/creditos',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
+  '/app': typeof AppRouteWithChildren
+  '/login': typeof LoginRoute
+  '/login-admin': typeof LoginAdminRoute
+  '/register': typeof RegisterRoute
+  '/superadmin': typeof SuperadminRoute
+  '/app/creditos': typeof AppCreditosRoute
+  '/app/partidos': typeof AppPartidosRoute
+  '/app/perfil': typeof AppPerfilRoute
+  '/app/tabla': typeof AppTablaRoute
+  '/app/': typeof AppIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
+  '/login': typeof LoginRoute
+  '/login-admin': typeof LoginAdminRoute
+  '/register': typeof RegisterRoute
+  '/superadmin': typeof SuperadminRoute
+  '/app/creditos': typeof AppCreditosRoute
+  '/app/partidos': typeof AppPartidosRoute
+  '/app/perfil': typeof AppPerfilRoute
+  '/app/tabla': typeof AppTablaRoute
+  '/app': typeof AppIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
+  '/app': typeof AppRouteWithChildren
+  '/login': typeof LoginRoute
+  '/login-admin': typeof LoginAdminRoute
+  '/register': typeof RegisterRoute
+  '/superadmin': typeof SuperadminRoute
+  '/app/creditos': typeof AppCreditosRoute
+  '/app/partidos': typeof AppPartidosRoute
+  '/app/perfil': typeof AppPerfilRoute
+  '/app/tabla': typeof AppTablaRoute
+  '/app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/admin'
+    | '/app'
+    | '/login'
+    | '/login-admin'
+    | '/register'
+    | '/superadmin'
+    | '/app/creditos'
+    | '/app/partidos'
+    | '/app/perfil'
+    | '/app/tabla'
+    | '/app/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/admin'
+    | '/login'
+    | '/login-admin'
+    | '/register'
+    | '/superadmin'
+    | '/app/creditos'
+    | '/app/partidos'
+    | '/app/perfil'
+    | '/app/tabla'
+    | '/app'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin'
+    | '/app'
+    | '/login'
+    | '/login-admin'
+    | '/register'
+    | '/superadmin'
+    | '/app/creditos'
+    | '/app/partidos'
+    | '/app/perfil'
+    | '/app/tabla'
+    | '/app/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRoute
+  AppRoute: typeof AppRouteWithChildren
+  LoginRoute: typeof LoginRoute
+  LoginAdminRoute: typeof LoginAdminRoute
+  RegisterRoute: typeof RegisterRoute
+  SuperadminRoute: typeof SuperadminRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/superadmin': {
+      id: '/superadmin'
+      path: '/superadmin'
+      fullPath: '/superadmin'
+      preLoaderRoute: typeof SuperadminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/register': {
+      id: '/register'
+      path: '/register'
+      fullPath: '/register'
+      preLoaderRoute: typeof RegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login-admin': {
+      id: '/login-admin'
+      path: '/login-admin'
+      fullPath: '/login-admin'
+      preLoaderRoute: typeof LoginAdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app': {
+      id: '/app'
+      path: '/app'
+      fullPath: '/app'
+      preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,11 +230,70 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/app/': {
+      id: '/app/'
+      path: '/'
+      fullPath: '/app/'
+      preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/tabla': {
+      id: '/app/tabla'
+      path: '/tabla'
+      fullPath: '/app/tabla'
+      preLoaderRoute: typeof AppTablaRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/perfil': {
+      id: '/app/perfil'
+      path: '/perfil'
+      fullPath: '/app/perfil'
+      preLoaderRoute: typeof AppPerfilRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/partidos': {
+      id: '/app/partidos'
+      path: '/partidos'
+      fullPath: '/app/partidos'
+      preLoaderRoute: typeof AppPartidosRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/creditos': {
+      id: '/app/creditos'
+      path: '/creditos'
+      fullPath: '/app/creditos'
+      preLoaderRoute: typeof AppCreditosRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
+interface AppRouteChildren {
+  AppCreditosRoute: typeof AppCreditosRoute
+  AppPartidosRoute: typeof AppPartidosRoute
+  AppPerfilRoute: typeof AppPerfilRoute
+  AppTablaRoute: typeof AppTablaRoute
+  AppIndexRoute: typeof AppIndexRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppCreditosRoute: AppCreditosRoute,
+  AppPartidosRoute: AppPartidosRoute,
+  AppPerfilRoute: AppPerfilRoute,
+  AppTablaRoute: AppTablaRoute,
+  AppIndexRoute: AppIndexRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRoute,
+  AppRoute: AppRouteWithChildren,
+  LoginRoute: LoginRoute,
+  LoginAdminRoute: LoginAdminRoute,
+  RegisterRoute: RegisterRoute,
+  SuperadminRoute: SuperadminRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
