@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -15,6 +15,11 @@ export const Route = createFileRoute("/app/partidos")({
   component: PartidosPage,
 });
 
+interface TournamentRow {
+  id: string;
+  name: string;
+}
+
 interface MatchdayRow {
   id: string;
   number: number;
@@ -22,13 +27,14 @@ interface MatchdayRow {
   entry_cost: number;
   prize_pool: number;
   tournament_id: string;
-  tournaments: { name: string } | null;
 }
 
 type MatchRow = MatchData & { matchday_id: string };
 
 function PartidosPage() {
   const { user } = useAuth();
+  const [tournaments, setTournaments] = useState<TournamentRow[]>([]);
+  const [activeTournament, setActiveTournament] = useState<string>("");
   const [matchdays, setMatchdays] = useState<MatchdayRow[]>([]);
   const [activeMd, setActiveMd] = useState<string | null>(null);
   const [matches, setMatches] = useState<MatchRow[]>([]);
@@ -37,24 +43,45 @@ function PartidosPage() {
   const [loading, setLoading] = useState(true);
   const [savingState, setSavingState] = useState(false);
 
-  // Cargar matchdays
+  // Cargar torneos + matchdays una vez
   useEffect(() => {
     void (async () => {
-      const { data, error } = await supabase
-        .from("matchdays")
-        .select("id,number,starts_at,entry_cost,prize_pool,tournament_id,tournaments(name)")
-        .order("starts_at", { ascending: true });
-      if (error) {
-        toast.error("Error cargando fechas: " + error.message);
-        return;
+      const [{ data: ts, error: et }, { data: mds, error: em }] = await Promise.all([
+        supabase.from("tournaments").select("id,name").eq("is_active", true).order("name"),
+        supabase
+          .from("matchdays")
+          .select("id,number,starts_at,entry_cost,prize_pool,tournament_id")
+          .order("starts_at", { ascending: true }),
+      ]);
+      if (et) toast.error("Error cargando ligas: " + et.message);
+      if (em) toast.error("Error cargando fechas: " + em.message);
+      const tournamentsList = (ts ?? []) as TournamentRow[];
+      setTournaments(tournamentsList);
+      setMatchdays((mds ?? []) as MatchdayRow[]);
+      if (tournamentsList.length && !activeTournament) {
+        setActiveTournament(tournamentsList[0].id);
       }
-      const mds = (data ?? []) as unknown as MatchdayRow[];
-      setMatchdays(mds);
-      if (mds.length && !activeMd) setActiveMd(mds[0].id);
       setLoading(false);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Filtrar matchdays por liga activa y elegir la primera por defecto
+  const filteredMatchdays = useMemo(
+    () => matchdays.filter((m) => m.tournament_id === activeTournament),
+    [matchdays, activeTournament]
+  );
+
+  useEffect(() => {
+    if (filteredMatchdays.length > 0) {
+      setActiveMd((curr) =>
+        curr && filteredMatchdays.some((m) => m.id === curr) ? curr : filteredMatchdays[0].id
+      );
+    } else {
+      setActiveMd(null);
+      setMatches([]);
+    }
+  }, [filteredMatchdays]);
 
   // Cargar matches + predicciones del usuario al cambiar matchday
   useEffect(() => {
@@ -114,39 +141,56 @@ function PartidosPage() {
     setTimeout(() => setSaved(false), 2200);
   };
 
-  const activeMatchday = matchdays.find((m) => m.id === activeMd);
+  const activeMatchday = filteredMatchdays.find((m) => m.id === activeMd);
+  const activeTournamentName = tournaments.find((t) => t.id === activeTournament)?.name ?? "Liga";
 
   return (
     <div className="app-wrap">
-      {/* Selector de fechas */}
-      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-3 -mx-4 px-4 bg-navy-2 border-b border-border/40">
-        {loading && <div className="text-sm text-muted-foreground py-2">Cargando fechas…</div>}
-        {matchdays.map((md) => {
-          const date = new Date(md.starts_at);
-          const day = String(date.getDate()).padStart(2, "0");
-          const month = date.toLocaleDateString("es-AR", { month: "short" }).toUpperCase().replace(".", "");
-          return (
-            <button
-              key={md.id}
-              type="button"
-              className={`date-pill ${activeMd === md.id ? "is-active" : ""}`}
-              onClick={() => setActiveMd(md.id)}
-            >
-              <span className="text-lg font-extrabold leading-none">{day}</span>
-              <span className="text-[0.55rem] font-bold tracking-[0.1em] mt-0.5">{month}</span>
-              <span className="text-[0.55rem] font-bold tracking-[0.1em] mt-0.5 opacity-80">F{md.number}</span>
-            </button>
-          );
-        })}
+      {/* Selector de liga */}
+      <div className="mb-2">
+        <label htmlFor="league" className="field-label">Liga</label>
+        <select
+          id="league"
+          className="field-input"
+          value={activeTournament}
+          onChange={(e) => setActiveTournament(e.target.value)}
+          disabled={loading || tournaments.length === 0}
+        >
+          {tournaments.map((t) => (
+            <option key={t.id} value={t.id}>{t.name}</option>
+          ))}
+        </select>
       </div>
+
+      {/* Selector de fechas */}
+      {filteredMatchdays.length > 0 && (
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-3 -mx-4 px-4 bg-navy-2 border-b border-border/40">
+          {filteredMatchdays.map((md) => {
+            const date = new Date(md.starts_at);
+            const day = String(date.getDate()).padStart(2, "0");
+            const month = date.toLocaleDateString("es-AR", { month: "short" }).toUpperCase().replace(".", "");
+            return (
+              <button
+                key={md.id}
+                type="button"
+                className={`date-pill ${activeMd === md.id ? "is-active" : ""}`}
+                onClick={() => setActiveMd(md.id)}
+              >
+                <span className="text-lg font-extrabold leading-none">{day}</span>
+                <span className="text-[0.55rem] font-bold tracking-[0.1em] mt-0.5">{month}</span>
+                <span className="text-[0.55rem] font-bold tracking-[0.1em] mt-0.5 opacity-80">F{md.number}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Pozo */}
       {activeMatchday && (
         <div
           className="mt-3 mb-3 flex items-center justify-between rounded-xl border border-primary/25 px-4 py-3"
           style={{
-            background:
-              "linear-gradient(135deg, var(--card), var(--navy-deep))",
+            background: "linear-gradient(135deg, var(--card), var(--navy-deep))",
           }}
         >
           <div>
@@ -157,7 +201,7 @@ function PartidosPage() {
               {activeMatchday.prize_pool.toLocaleString("es-AR")} cr
             </div>
             <div className="text-[0.7rem] text-muted-foreground mt-0.5">
-              {activeMatchday.tournaments?.name ?? "Torneo"} · Premio 1°: {Math.round(activeMatchday.prize_pool * 0.2).toLocaleString("es-AR")} cr
+              {activeTournamentName} · Premio 1°: {Math.round(activeMatchday.prize_pool * 0.2).toLocaleString("es-AR")} cr
             </div>
           </div>
           <button type="button" className="btn-mini">
@@ -168,9 +212,9 @@ function PartidosPage() {
 
       {/* Partidos */}
       <div className="mt-2">
-        {matches.length === 0 && !loading && (
-          <div className="card-base text-center text-sm text-muted-foreground">
-            No hay partidos para esta fecha.
+        {!loading && matches.length === 0 && (
+          <div className="card-base text-center text-sm text-muted-foreground py-6">
+            Los partidos de esta fecha se cargarán próximamente ⚽
           </div>
         )}
         {matches.map((m, i) => (
