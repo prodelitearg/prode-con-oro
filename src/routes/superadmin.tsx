@@ -321,13 +321,20 @@ function Torneos() {
           </form>
           {matchdays.length === 0 && <div className="text-sm text-muted-foreground mb-2">Sin fechas todavía.</div>}
           {matchdays.map((md) => (
-            <div key={md.id} className={`card-base flex items-center justify-between mb-2 !py-3 ${selMd === md.id ? "border-primary/60" : ""}`}>
+            <div key={md.id} className={`card-base flex items-center justify-between mb-2 !py-3 gap-2 ${selMd === md.id ? "border-primary/60" : ""}`}>
               <button type="button" onClick={() => setSelMd(selMd === md.id ? null : md.id)} className="text-left flex-1">
-                <div className="text-sm font-bold text-foreground">Fecha {md.number}</div>
+                <div className="text-sm font-bold text-foreground flex items-center gap-2">
+                  Fecha {md.number}
+                  {md.closed_at ? <span className="tag tag-success">Cerrada</span> : <span className="tag">Abierta</span>}
+                  {md.pot_carry > 0 && <span className="tag tag-gold">+{md.pot_carry} cr acum.</span>}
+                </div>
                 <div className="text-[0.7rem] text-muted-foreground mt-0.5">
                   {new Date(md.starts_at).toLocaleString("es-AR")} · Entrada {md.entry_cost} cr · Pozo {md.prize_pool} cr
                 </div>
               </button>
+              {!md.closed_at && (
+                <button type="button" className="btn-mini" onClick={() => closeMatchday(md)}>Cerrar</button>
+              )}
               <button type="button" className="btn-mini is-danger" onClick={() => deleteMatchday(md)}>Eliminar</button>
             </div>
           ))}
