@@ -1,5 +1,5 @@
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/prodelite/Logo";
@@ -37,10 +37,95 @@ const TAB_LABEL: Record<Tab, string> = {
   comisiones: "Comisiones",
 };
 
+interface Affiliate {
+  user_id: string;
+  nombre: string;
+  apellido: string;
+  localidad: string | null;
+  provincia: string | null;
+  created_at: string;
+  retirables: number;
+  bonus: number;
+}
+
+interface CommissionRow {
+  id: string;
+  amount: number;
+  created_at: string;
+  matchdays: {
+    number: number;
+    closed_at: string | null;
+    tournaments: { name: string } | null;
+  } | null;
+}
+
+interface AdminData {
+  affiliates: Affiliate[];
+  commissions: CommissionRow[];
+  loading: boolean;
+}
+
+function useAdminData(userId: string | undefined): AdminData {
+  const [affiliates, setAffiliates] = useState<Affiliate[]>([]);
+  const [commissions, setCommissions] = useState<CommissionRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!userId) return;
+    const load = async () => {
+      setLoading(true);
+      const [profRes, comRes] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("user_id, nombre, apellido, localidad, provincia, created_at")
+          .eq("admin_id", userId)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("matchday_commissions")
+          .select("id, amount, created_at, matchdays(number, closed_at, tournaments(name))")
+          .eq("recipient_user_id", userId)
+          .eq("kind", "admin")
+          .order("created_at", { ascending: false })
+          .limit(50),
+      ]);
+
+      if (profRes.error) console.error(profRes.error);
+      if (comRes.error) console.error(comRes.error);
+
+      const profs = profRes.data ?? [];
+      let credits: Record<string, { retirables: number; bonus: number }> = {};
+      if (profs.length > 0) {
+        const ids = profs.map((p) => p.user_id);
+        const { data: cr } = await supabase
+          .from("user_credits")
+          .select("user_id, retirables, bonus")
+          .in("user_id", ids);
+        credits = Object.fromEntries(
+          (cr ?? []).map((c) => [c.user_id, { retirables: c.retirables, bonus: c.bonus }]),
+        );
+      }
+
+      setAffiliates(
+        profs.map((p) => ({
+          ...p,
+          retirables: credits[p.user_id]?.retirables ?? 0,
+          bonus: credits[p.user_id]?.bonus ?? 0,
+        })),
+      );
+      setCommissions((comRes.data ?? []) as unknown as CommissionRow[]);
+      setLoading(false);
+    };
+    void load();
+  }, [userId]);
+
+  return { affiliates, commissions, loading };
+}
+
 function AdminPanel() {
   const [tab, setTab] = useState<Tab>("dashboard");
   const navigate = useNavigate();
-  const { signOut, profile } = useAuth();
+  const { signOut, profile, user } = useAuth();
+  const data = useAdminData(user?.id);
 
   const handleLogout = async () => {
     await signOut();
@@ -73,22 +158,40 @@ function AdminPanel() {
           ))}
         </div>
 
-        {tab === "dashboard" && <DashTab />}
-        {tab === "afiliados" && <AfiliadosTab />}
+        {tab === "dashboard" && <DashTab data={data} refCode={profile?.ref_code ?? null} />}
+        {tab === "afiliados" && <AfiliadosTab data={data} />}
         {tab === "retiros" && <RetirosTab />}
-        {tab === "comisiones" && <ComisionesTab />}
+        {tab === "comisiones" && <ComisionesTab data={data} />}
       </div>
     </>
   );
 }
 
-function DashTab() {
+function DashTab({ data, refCode }: { data: AdminData; refCode: string | null }) {
+  const totalCom = data.commissions.reduce((s, c) => s + c.amount, 0);
+  const fechasCobradas = useMemo(
+    () => new Set(data.commissions.map((c) => c.matchdays?.number).filter(Boolean)).size,
+    [data.commissions],
+  );
+
+  const copyRef = async () => {
+    if (!refCode) return;
+    const url = `${window.location.origin}/register?ref=${refCode}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("Link copiado");
+    } catch {
+      toast.error("No se pudo copiar");
+    }
+  };
+
   const stats = [
-    { v: "28", l: "Afiliados" },
-    { v: "4", l: "Retiros pend." },
-    { v: "12%", l: "Comisión" },
-    { v: "3.240", l: "Cr. ganados" },
+    { v: String(data.affiliates.length), l: "Afiliados" },
+    { v: String(fechasCobradas), l: "Fechas cobradas" },
+    { v: `${totalCom}`, l: "Cr. ganados" },
+    { v: "10%", l: "Comisión" },
   ];
+
   return (
     <>
       <div className="section-label !mt-0">Resumen</div>
@@ -100,38 +203,70 @@ function DashTab() {
           </div>
         ))}
       </div>
-      <div className="card-base flex items-center justify-between">
-        <div>
-          <div className="text-sm font-bold text-foreground">Tu nivel</div>
-          <div className="text-xs text-muted-foreground mt-0.5">28 afiliados · Comisión 12%</div>
+
+      <button
+        type="button"
+        onClick={copyRef}
+        className="card-base w-full text-left hover:border-primary/40 transition-colors"
+      >
+        <div className="text-xs text-muted-foreground">Tu link de afiliación</div>
+        <div className="font-display text-sm font-bold text-primary mt-1 truncate">
+          prodelite.com/register?ref={refCode ?? "—"}
         </div>
-        <span className="tag tag-gold">Nivel Oro ★</span>
-      </div>
+        <div className="text-[0.65rem] text-muted-foreground mt-1">Tocá para copiar</div>
+      </button>
+
+      <div className="section-label">Últimas comisiones</div>
+      {data.loading && <div className="text-sm text-muted-foreground">Cargando…</div>}
+      {!data.loading && data.commissions.length === 0 && (
+        <div className="card-base text-center !py-5 text-sm text-muted-foreground">
+          Todavía no hay comisiones. Cuando se cierre una fecha donde tus afiliados participen, vas a verlas acá.
+        </div>
+      )}
+      {data.commissions.slice(0, 5).map((c) => (
+        <div key={c.id} className="card-base flex items-center justify-between mb-2 !py-3">
+          <div className="min-w-0">
+            <div className="text-[0.65rem] tracking-[0.15em] text-muted-foreground uppercase font-semibold truncate">
+              {c.matchdays?.tournaments?.name ?? "—"}
+            </div>
+            <div className="text-sm font-bold text-foreground mt-0.5">Fecha {c.matchdays?.number ?? "?"}</div>
+          </div>
+          <div className="text-right">
+            <div className="font-display text-base font-extrabold text-success">+{c.amount} cr</div>
+            <span className="tag tag-success mt-1 inline-block">✓ retirable</span>
+          </div>
+        </div>
+      ))}
     </>
   );
 }
 
-function AfiliadosTab() {
-  const demo = [
-    { n: "Juan García", loc: "San Rafael, Mendoza", ret: 818, bonus: 200, status: "activo" },
-    { n: "Claudia López", loc: "Casilda, Santa Fe", ret: 1250, bonus: 0, status: "retiro pend." },
-    { n: "Andrés Pérez", loc: "Mendoza Capital", ret: 80, bonus: 80, status: "activo" },
-  ];
+function AfiliadosTab({ data }: { data: AdminData }) {
   return (
     <>
-      <div className="section-label !mt-0">Mis afiliados</div>
-      {demo.map((a, i) => (
-        <div key={i} className="card-base flex items-center justify-between mb-2 !py-3">
-          <div>
-            <div className="text-sm font-bold text-foreground">{a.n}</div>
-            <div className="text-[0.7rem] text-muted-foreground mt-0.5">{a.loc}</div>
+      <div className="section-label !mt-0">Mis afiliados ({data.affiliates.length})</div>
+      {data.loading && <div className="text-sm text-muted-foreground">Cargando…</div>}
+      {!data.loading && data.affiliates.length === 0 && (
+        <div className="card-base text-center !py-5 text-sm text-muted-foreground">
+          Todavía no tenés afiliados. Compartí tu link desde el panel.
+        </div>
+      )}
+      {data.affiliates.map((a) => (
+        <div key={a.user_id} className="card-base flex items-center justify-between mb-2 !py-3">
+          <div className="min-w-0">
+            <div className="text-sm font-bold text-foreground truncate">
+              {a.nombre} {a.apellido}
+            </div>
+            <div className="text-[0.7rem] text-muted-foreground mt-0.5 truncate">
+              {a.localidad || "—"}{a.provincia ? `, ${a.provincia}` : ""}
+            </div>
+            <div className="text-[0.65rem] text-muted-foreground mt-0.5">
+              Desde {new Date(a.created_at).toLocaleDateString("es-AR")}
+            </div>
           </div>
-          <div className="text-right">
-            <div className="font-display text-sm font-extrabold text-success">{a.ret} cr ret.</div>
+          <div className="text-right shrink-0">
+            <div className="font-display text-sm font-extrabold text-success">{a.retirables} cr ret.</div>
             {a.bonus > 0 && <div className="text-[0.7rem] font-bold text-warning mt-0.5">{a.bonus} cr bonus</div>}
-            <span className={`tag mt-1 inline-block ${a.status === "activo" ? "tag-success" : "tag-warning"}`}>
-              {a.status}
-            </span>
           </div>
         </div>
       ))}
@@ -140,53 +275,49 @@ function AfiliadosTab() {
 }
 
 function RetirosTab() {
-  const demo = [
-    { n: "Claudia López", cr: 1250, ars: "$62.500", fecha: "Hoy 14:32", alias: "claudia.mp" },
-    { n: "Andrés Pérez", cr: 500, ars: "$25.000", fecha: "Ayer 09:15", alias: "andres.perez22" },
-  ];
   return (
     <>
       <div className="section-label !mt-0">Solicitudes de retiro</div>
-      {demo.map((r, i) => (
-        <div key={i} className="card-base mb-3">
-          <div className="flex justify-between items-start mb-2">
-            <div>
-              <div className="text-sm font-bold text-foreground">{r.n}</div>
-              <div className="text-[0.7rem] text-muted-foreground mt-0.5">{r.fecha}</div>
-              <div className="text-[0.7rem] text-muted-foreground">Alias MP: {r.alias}</div>
-            </div>
-            <div className="text-right">
-              <div className="font-display text-base font-extrabold text-primary">{r.ars}</div>
-              <div className="text-[0.7rem] text-muted-foreground mt-0.5">{r.cr} cr retirables</div>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <button type="button" className="btn-mini">Aprobar y pagar</button>
-            <button type="button" className="btn-mini is-danger">Rechazar</button>
-          </div>
-        </div>
-      ))}
+      <div className="card-base text-center !py-6 text-sm text-muted-foreground">
+        💸 El módulo de retiros estará disponible próximamente.
+      </div>
     </>
   );
 }
 
-function ComisionesTab() {
-  const demo = [
-    { torneo: "Liga Profesional F14", jugadores: 28, comision: "100 cr", fecha: "17 May" },
-    { torneo: "Champions Jornada 6", jugadores: 15, comision: "63 cr", fecha: "16 May" },
-  ];
+function ComisionesTab({ data }: { data: AdminData }) {
+  const total = data.commissions.reduce((s, c) => s + c.amount, 0);
+
   return (
     <>
       <div className="section-label !mt-0">Mis comisiones (solo créditos retirables)</div>
-      {demo.map((c, i) => (
-        <div key={i} className="card-base flex items-center justify-between mb-2 !py-3">
-          <div>
-            <div className="text-[0.7rem] text-muted-foreground">{c.fecha}</div>
-            <div className="text-sm font-bold text-foreground mt-0.5">{c.torneo}</div>
-            <div className="text-[0.7rem] text-muted-foreground mt-0.5">{c.jugadores} jugadores</div>
+
+      <div className="card-elevated text-center mb-3">
+        <div className="text-[0.65rem] tracking-[0.18em] text-muted-foreground uppercase">Total acumulado</div>
+        <div className="font-display text-3xl font-extrabold text-primary mt-1">{total} cr</div>
+        <div className="text-[0.7rem] text-muted-foreground mt-1">{data.commissions.length} fechas cobradas</div>
+      </div>
+
+      {data.loading && <div className="text-sm text-muted-foreground">Cargando…</div>}
+      {!data.loading && data.commissions.length === 0 && (
+        <div className="card-base text-center !py-5 text-sm text-muted-foreground">
+          Sin comisiones todavía.
+        </div>
+      )}
+      {data.commissions.map((c) => (
+        <div key={c.id} className="card-base flex items-center justify-between mb-2 !py-3">
+          <div className="min-w-0">
+            <div className="text-[0.7rem] text-muted-foreground">
+              {c.matchdays?.closed_at
+                ? new Date(c.matchdays.closed_at).toLocaleDateString("es-AR")
+                : new Date(c.created_at).toLocaleDateString("es-AR")}
+            </div>
+            <div className="text-sm font-bold text-foreground mt-0.5 truncate">
+              {c.matchdays?.tournaments?.name ?? "—"} · F{c.matchdays?.number ?? "?"}
+            </div>
           </div>
-          <div className="text-right">
-            <div className="font-display text-base font-extrabold text-primary">{c.comision}</div>
+          <div className="text-right shrink-0">
+            <div className="font-display text-base font-extrabold text-primary">+{c.amount} cr</div>
             <span className="tag tag-success mt-1 inline-block">✓ retirable</span>
           </div>
         </div>
