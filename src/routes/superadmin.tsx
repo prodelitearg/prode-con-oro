@@ -4,6 +4,8 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/prodelite/Logo";
 import { useAuth } from "@/contexts/AuthContext";
+import { useServerFn } from "@tanstack/react-start";
+import { syncMatchdayFromApi } from "@/server/sync-football";
 
 export const Route = createFileRoute("/superadmin")({
   head: () => ({
@@ -25,10 +27,11 @@ export const Route = createFileRoute("/superadmin")({
   component: SuperPanel,
 });
 
-const TABS = ["dashboard", "admins", "torneos", "usuarios", "finanzas"] as const;
+const TABS = ["dashboard", "sync", "admins", "torneos", "usuarios", "finanzas"] as const;
 type Tab = (typeof TABS)[number];
 const LABEL: Record<Tab, string> = {
   dashboard: "Panel",
+  sync: "Sync API",
   admins: "Admins",
   torneos: "Torneos",
   usuarios: "Usuarios",
@@ -68,6 +71,7 @@ function SuperPanel() {
         </div>
 
         {tab === "dashboard" && <Dash />}
+        {tab === "sync" && <SyncApi />}
         {tab === "admins" && <Admins />}
         {tab === "torneos" && <Torneos />}
         {tab === "usuarios" && <Usuarios />}
