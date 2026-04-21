@@ -351,6 +351,45 @@ export type Database = {
         }
         Relationships: []
       }
+      withdrawals: {
+        Row: {
+          admin_id: string | null
+          alias: string
+          amount: number
+          created_at: string
+          id: string
+          notes: string | null
+          processed_at: string | null
+          processed_by: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          admin_id?: string | null
+          alias: string
+          amount: number
+          created_at?: string
+          id?: string
+          notes?: string | null
+          processed_at?: string | null
+          processed_by?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          admin_id?: string | null
+          alias?: string
+          amount?: number
+          created_at?: string
+          id?: string
+          notes?: string | null
+          processed_at?: string | null
+          processed_by?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -372,6 +411,14 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      request_withdrawal: {
+        Args: { _alias: string; _amount: number }
+        Returns: Json
+      }
+      resolve_withdrawal: {
+        Args: { _approve: boolean; _notes?: string; _withdrawal_id: string }
+        Returns: Json
       }
       tournament_leaderboard: {
         Args: { _tournament_id: string }
