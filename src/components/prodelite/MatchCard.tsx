@@ -8,6 +8,7 @@ export interface MatchData {
   away_team: string;
   away_short: string;
   away_color: string;
+  kickoff?: string;
 }
 
 interface MatchCardProps {
@@ -25,6 +26,10 @@ export function MatchCard({ match, homeScore, awayScore, onChange, highlight, di
     onChange(match.id, side, v);
   };
 
+  const time = match.kickoff
+    ? new Date(match.kickoff).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false })
+    : null;
+
   return (
     <div className={`match-card ${highlight ? "is-highlight" : ""}`}>
       {/* Local */}
@@ -36,7 +41,13 @@ export function MatchCard({ match, homeScore, awayScore, onChange, highlight, di
       </div>
 
       {/* Score inputs */}
-      <div className="flex items-center gap-1 flex-shrink-0">
+      <div className="flex flex-col items-center flex-shrink-0">
+        {time && (
+          <span className="text-[0.55rem] font-bold tracking-[0.1em] text-muted-foreground mb-0.5">
+            {time}
+          </span>
+        )}
+        <div className="flex items-center gap-1">
         <label className="score-box">
           <span className="sr-only">Goles {match.home_team}</span>
           <input
@@ -64,6 +75,7 @@ export function MatchCard({ match, homeScore, awayScore, onChange, highlight, di
             placeholder="-"
           />
         </label>
+        </div>
       </div>
 
       {/* Visitante */}
