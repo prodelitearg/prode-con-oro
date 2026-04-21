@@ -92,6 +92,8 @@ export type Database = {
           closed_at: string | null
           created_at: string
           entry_cost: number
+          external_league_id: number | null
+          external_season: number | null
           id: string
           is_open: boolean
           number: number
@@ -104,6 +106,8 @@ export type Database = {
           closed_at?: string | null
           created_at?: string
           entry_cost?: number
+          external_league_id?: number | null
+          external_season?: number | null
           id?: string
           is_open?: boolean
           number: number
@@ -116,6 +120,8 @@ export type Database = {
           closed_at?: string | null
           created_at?: string
           entry_cost?: number
+          external_league_id?: number | null
+          external_season?: number | null
           id?: string
           is_open?: boolean
           number?: number
@@ -141,6 +147,7 @@ export type Database = {
           away_short: string
           away_team: string
           created_at: string
+          external_id: number | null
           home_color: string
           home_score: number | null
           home_short: string
@@ -156,6 +163,7 @@ export type Database = {
           away_short: string
           away_team: string
           created_at?: string
+          external_id?: number | null
           home_color?: string
           home_score?: number | null
           home_short: string
@@ -171,6 +179,7 @@ export type Database = {
           away_short?: string
           away_team?: string
           created_at?: string
+          external_id?: number | null
           home_color?: string
           home_score?: number | null
           home_short?: string
@@ -289,6 +298,8 @@ export type Database = {
         Row: {
           country: string | null
           created_at: string
+          external_id: number | null
+          external_provider: string | null
           id: string
           is_active: boolean
           name: string
@@ -296,6 +307,8 @@ export type Database = {
         Insert: {
           country?: string | null
           created_at?: string
+          external_id?: number | null
+          external_provider?: string | null
           id?: string
           is_active?: boolean
           name: string
@@ -303,6 +316,8 @@ export type Database = {
         Update: {
           country?: string | null
           created_at?: string
+          external_id?: number | null
+          external_provider?: string | null
           id?: string
           is_active?: boolean
           name?: string
