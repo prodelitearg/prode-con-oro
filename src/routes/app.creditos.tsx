@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/app/creditos")({
   head: () => ({
@@ -21,7 +22,7 @@ const PAQUETES = [
 ] as const;
 
 function CreditosPage() {
-  const { credits } = useAuth();
+  const { credits, user, refresh } = useAuth();
   const retirables = credits?.retirables ?? 0;
   const bonus = credits?.bonus ?? 0;
   const total = retirables + bonus;
@@ -29,10 +30,38 @@ function CreditosPage() {
   const [pkg, setPkg] = useState<string | null>(null);
   const [retiro, setRetiro] = useState("");
   const [alias, setAlias] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  type WithdrawalRow = {
+    id: string;
+    amount: number;
+    alias: string;
+    status: string;
+    notes: string | null;
+    created_at: string;
+    processed_at: string | null;
+  };
+  const [history, setHistory] = useState<WithdrawalRow[]>([]);
+
+  const loadHistory = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from("withdrawals" as never)
+      .select("id, amount, alias, status, notes, created_at, processed_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(20);
+    setHistory((data ?? []) as unknown as WithdrawalRow[]);
+  };
+
+  useEffect(() => {
+    void loadHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const selected = PAQUETES.find((p) => p.id === pkg);
 
-  const handleRetiro = (e: React.FormEvent) => {
+  const handleRetiro = async (e: React.FormEvent) => {
     e.preventDefault();
     const amount = Number(retiro);
     if (!amount || amount < 500) {
@@ -47,9 +76,21 @@ function CreditosPage() {
       toast.error("Ingresá tu alias o CVU");
       return;
     }
+    setSubmitting(true);
+    const { error } = await supabase.rpc("request_withdrawal" as never, {
+      _amount: amount,
+      _alias: alias.trim(),
+    } as never);
+    setSubmitting(false);
+    if (error) {
+      toast.error(error.message ?? "No se pudo crear la solicitud");
+      return;
+    }
     toast.success("Solicitud enviada — tu administrador procesará el pago en 24-48hs");
     setRetiro("");
     setAlias("");
+    await refresh();
+    await loadHistory();
   };
 
   const handleCompra = () => {
@@ -193,8 +234,8 @@ function CreditosPage() {
             onChange={(e) => setAlias(e.target.value)}
           />
         </div>
-        <button type="submit" className="btn-gold" disabled={retirables < 500}>
-          Solicitar retiro
+        <button type="submit" className="btn-gold" disabled={retirables < 500 || submitting}>
+          {submitting ? "Enviando…" : "Solicitar retiro"}
         </button>
         {retirables < 500 && (
           <p className="mt-2 text-center text-xs text-muted-foreground">
@@ -202,6 +243,38 @@ function CreditosPage() {
           </p>
         )}
       </form>
+
+      {history.length > 0 && (
+        <>
+          <h2 className="section-label">Mis solicitudes</h2>
+          <div className="space-y-2 mb-4">
+            {history.map((w) => {
+              const tag =
+                w.status === "approved"
+                  ? "tag-success"
+                  : w.status === "rejected"
+                    ? "tag-warning"
+                    : "tag-gold";
+              const label =
+                w.status === "approved" ? "✓ Pagada" : w.status === "rejected" ? "✗ Rechazada" : "⏳ Pendiente";
+              return (
+                <div key={w.id} className="card-base !py-3 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-bold text-foreground">{w.amount.toLocaleString("es-AR")} cr</div>
+                    <div className="text-[0.7rem] text-muted-foreground mt-0.5 truncate">
+                      {new Date(w.created_at).toLocaleDateString("es-AR")} · {w.alias}
+                    </div>
+                    {w.notes && (
+                      <div className="text-[0.7rem] text-muted-foreground italic mt-1 truncate">“{w.notes}”</div>
+                    )}
+                  </div>
+                  <span className={`tag ${tag} shrink-0`}>{label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
     </div>
   );
 }

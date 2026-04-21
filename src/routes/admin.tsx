@@ -1,5 +1,5 @@
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/prodelite/Logo";
@@ -160,7 +160,7 @@ function AdminPanel() {
 
         {tab === "dashboard" && <DashTab data={data} refCode={profile?.ref_code ?? null} />}
         {tab === "afiliados" && <AfiliadosTab data={data} />}
-        {tab === "retiros" && <RetirosTab />}
+        {tab === "retiros" && <RetirosTab adminId={user?.id} />}
         {tab === "comisiones" && <ComisionesTab data={data} />}
       </div>
     </>
@@ -274,13 +274,163 @@ function AfiliadosTab({ data }: { data: AdminData }) {
   );
 }
 
-function RetirosTab() {
+interface WithdrawalReq {
+  id: string;
+  user_id: string;
+  amount: number;
+  alias: string;
+  status: string;
+  notes: string | null;
+  created_at: string;
+  processed_at: string | null;
+  profile_name?: string;
+}
+
+function RetirosTab({ adminId }: { adminId: string | undefined }) {
+  const [items, setItems] = useState<WithdrawalReq[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!adminId) return;
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("withdrawals" as never)
+      .select("id, user_id, amount, alias, status, notes, created_at, processed_at")
+      .eq("admin_id", adminId)
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (error) {
+      console.error(error);
+      setItems([]);
+      setLoading(false);
+      return;
+    }
+    const rows = (data ?? []) as unknown as WithdrawalReq[];
+    if (rows.length > 0) {
+      const ids = Array.from(new Set(rows.map((r) => r.user_id)));
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("user_id, nombre, apellido")
+        .in("user_id", ids);
+      const map = new Map((profs ?? []).map((p) => [p.user_id, `${p.nombre} ${p.apellido}`.trim()]));
+      setItems(rows.map((r) => ({ ...r, profile_name: map.get(r.user_id) ?? "Jugador" })));
+    } else {
+      setItems([]);
+    }
+    setLoading(false);
+  }, [adminId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const resolve = async (id: string, approve: boolean) => {
+    let notes: string | null = null;
+    if (!approve) {
+      const txt = window.prompt("Motivo del rechazo (opcional):") ?? "";
+      notes = txt.trim() || null;
+    } else if (!window.confirm("¿Confirmás que pagaste por Mercado Pago y querés marcar como aprobada?")) {
+      return;
+    }
+    setBusyId(id);
+    const { error } = await supabase.rpc("resolve_withdrawal" as never, {
+      _withdrawal_id: id,
+      _approve: approve,
+      _notes: notes,
+    } as never);
+    setBusyId(null);
+    if (error) {
+      toast.error(error.message ?? "No se pudo procesar");
+      return;
+    }
+    toast.success(approve ? "Solicitud aprobada" : "Solicitud rechazada y créditos devueltos");
+    await load();
+  };
+
+  const pending = items.filter((i) => i.status === "pending");
+  const resolved = items.filter((i) => i.status !== "pending");
+
   return (
     <>
-      <div className="section-label !mt-0">Solicitudes de retiro</div>
-      <div className="card-base text-center !py-6 text-sm text-muted-foreground">
-        💸 El módulo de retiros estará disponible próximamente.
-      </div>
+      <div className="section-label !mt-0">Pendientes ({pending.length})</div>
+      {loading && <div className="text-sm text-muted-foreground">Cargando…</div>}
+      {!loading && pending.length === 0 && (
+        <div className="card-base text-center !py-5 text-sm text-muted-foreground">
+          No hay solicitudes pendientes.
+        </div>
+      )}
+      {pending.map((w) => (
+        <div key={w.id} className="card-base mb-2 !py-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-sm font-bold text-foreground truncate">{w.profile_name}</div>
+              <div className="text-[0.7rem] text-muted-foreground mt-0.5">
+                {new Date(w.created_at).toLocaleDateString("es-AR")} ·{" "}
+                {new Date(w.created_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                Alias: <strong className="text-foreground">{w.alias}</strong>
+              </div>
+            </div>
+            <div className="text-right shrink-0">
+              <div className="font-display text-lg font-extrabold text-primary">{w.amount} cr</div>
+              <div className="text-[0.7rem] text-muted-foreground">
+                ${(w.amount * 50).toLocaleString("es-AR")} ARS
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-2 mt-3">
+            <button
+              type="button"
+              className="btn-mini flex-1 !bg-success/15 !text-success"
+              disabled={busyId === w.id}
+              onClick={() => resolve(w.id, true)}
+            >
+              ✓ Aprobar
+            </button>
+            <button
+              type="button"
+              className="btn-mini flex-1 !bg-warning/15 !text-warning"
+              disabled={busyId === w.id}
+              onClick={() => resolve(w.id, false)}
+            >
+              ✗ Rechazar
+            </button>
+          </div>
+        </div>
+      ))}
+
+      <div className="section-label">Historial</div>
+      {!loading && resolved.length === 0 && (
+        <div className="card-base text-center !py-5 text-sm text-muted-foreground">
+          Sin solicitudes resueltas.
+        </div>
+      )}
+      {resolved.map((w) => {
+        const tag = w.status === "approved" ? "tag-success" : "tag-warning";
+        const label = w.status === "approved" ? "✓ Pagada" : "✗ Rechazada";
+        return (
+          <div key={w.id} className="card-base flex items-center justify-between mb-2 !py-3">
+            <div className="min-w-0">
+              <div className="text-sm font-bold text-foreground truncate">{w.profile_name}</div>
+              <div className="text-[0.7rem] text-muted-foreground mt-0.5">
+                {w.processed_at
+                  ? new Date(w.processed_at).toLocaleDateString("es-AR")
+                  : new Date(w.created_at).toLocaleDateString("es-AR")}{" "}
+                · {w.alias}
+              </div>
+              {w.notes && (
+                <div className="text-[0.7rem] text-muted-foreground italic mt-0.5 truncate">“{w.notes}”</div>
+              )}
+            </div>
+            <div className="text-right shrink-0">
+              <div className="font-display text-base font-extrabold text-foreground">{w.amount} cr</div>
+              <span className={`tag ${tag} mt-1 inline-block`}>{label}</span>
+            </div>
+          </div>
+        );
+      })}
     </>
   );
 }
