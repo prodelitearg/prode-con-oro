@@ -4,6 +4,8 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/prodelite/Logo";
 import { useAuth } from "@/contexts/AuthContext";
+import { useServerFn } from "@tanstack/react-start";
+import { syncMatchdayFromApi } from "@/server/sync-football";
 
 export const Route = createFileRoute("/superadmin")({
   head: () => ({
@@ -25,10 +27,11 @@ export const Route = createFileRoute("/superadmin")({
   component: SuperPanel,
 });
 
-const TABS = ["dashboard", "admins", "torneos", "usuarios", "finanzas"] as const;
+const TABS = ["dashboard", "sync", "admins", "torneos", "usuarios", "finanzas"] as const;
 type Tab = (typeof TABS)[number];
 const LABEL: Record<Tab, string> = {
   dashboard: "Panel",
+  sync: "Sync API",
   admins: "Admins",
   torneos: "Torneos",
   usuarios: "Usuarios",
@@ -68,6 +71,7 @@ function SuperPanel() {
         </div>
 
         {tab === "dashboard" && <Dash />}
+        {tab === "sync" && <SyncApi />}
         {tab === "admins" && <Admins />}
         {tab === "torneos" && <Torneos />}
         {tab === "usuarios" && <Usuarios />}
@@ -113,6 +117,141 @@ function Dash() {
             <span className="text-sm text-success font-semibold">{s.v}</span>
           </div>
         ))}
+      </div>
+    </>
+  );
+}
+
+interface SyncTournament { id: string; name: string; external_id: number | null }
+
+function SyncApi() {
+  const syncFn = useServerFn(syncMatchdayFromApi);
+  const [tournaments, setTournaments] = useState<SyncTournament[]>([]);
+  const [tid, setTid] = useState("");
+  const [season, setSeason] = useState(String(new Date().getFullYear()));
+  const today = new Date().toISOString().slice(0, 10);
+  const in7 = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+  const [from, setFrom] = useState(today);
+  const [to, setTo] = useState(in7);
+  const [entryCost, setEntryCost] = useState("30");
+  const [busy, setBusy] = useState(false);
+  const [lastResult, setLastResult] = useState<string | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      const { data, error } = await supabase
+        .from("tournaments")
+        .select("id,name,external_id")
+        .not("external_id", "is", null)
+        .eq("is_active", true)
+        .order("name");
+      if (error) return toast.error(error.message);
+      const list = (data ?? []) as SyncTournament[];
+      setTournaments(list);
+      if (list.length && !tid) setTid(list[0].id);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleSync = async () => {
+    if (!tid) return toast.error("Seleccioná una liga");
+    setBusy(true);
+    setLastResult(null);
+    try {
+      const res = await syncFn({
+        data: {
+          tournamentId: tid,
+          fromDate: from,
+          toDate: to,
+          season: Number(season),
+          entryCost: Number(entryCost) || 30,
+        },
+      });
+      if (!res.ok) {
+        toast.error(res.error);
+        setLastResult("❌ " + res.error);
+      } else {
+        const msg = `✓ ${res.totalFixtures} partidos · ${res.createdMatchdays} fechas nuevas · ${res.upsertedMatches} partidos creados · ${res.updatedScores} resultados actualizados · Fechas: ${res.rounds.join(", ")}`;
+        toast.success("Sincronización completa");
+        setLastResult(msg);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error("Error: " + msg);
+      setLastResult("❌ " + msg);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="section-label !mt-0">Sincronizar partidos desde API-Football</div>
+      <div className="card-base mb-3 text-[0.75rem] text-muted-foreground">
+        Trae automáticamente las fechas y partidos de la liga seleccionada en el rango de días.
+        Las ligas <strong className="text-foreground">Casildense</strong> y <strong className="text-foreground">Sanrafaelina</strong> se siguen cargando manualmente desde la pestaña <em>Torneos</em>.
+      </div>
+
+      <div className="card-base">
+        <label className="field-label">Liga</label>
+        <select className="field-input mb-3" value={tid} onChange={(e) => setTid(e.target.value)}>
+          {tournaments.length === 0 && <option>Sin ligas con API vinculada</option>}
+          {tournaments.map((t) => (
+            <option key={t.id} value={t.id}>{t.name}</option>
+          ))}
+        </select>
+
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          <div>
+            <label className="field-label">Temporada</label>
+            <input
+              className="field-input"
+              type="number"
+              min={2000}
+              max={2100}
+              value={season}
+              onChange={(e) => setSeason(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="field-label">Entrada (cr)</label>
+            <input
+              className="field-input"
+              type="number"
+              min={0}
+              value={entryCost}
+              onChange={(e) => setEntryCost(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="field-label">Desde</label>
+            <input className="field-input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+          </div>
+          <div>
+            <label className="field-label">Hasta</label>
+            <input className="field-input" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+          </div>
+        </div>
+
+        <button
+          type="button"
+          className="btn-gold w-full !py-2.5"
+          onClick={handleSync}
+          disabled={busy || tournaments.length === 0}
+        >
+          {busy ? "Sincronizando…" : "↻ Sincronizar fixture y resultados"}
+        </button>
+
+        {lastResult && (
+          <div className="mt-3 text-[0.75rem] text-foreground border-t border-border/40 pt-3 leading-relaxed">
+            {lastResult}
+          </div>
+        )}
+      </div>
+
+      <div className="text-[0.7rem] text-muted-foreground mt-3 leading-relaxed">
+        <strong className="text-foreground">Tip:</strong> usá rangos cortos (1-2 semanas) para no consumir muchos requests del plan gratis (100/día).
+        La sincronización es idempotente: podés correrla varias veces sin duplicar partidos.
       </div>
     </>
   );

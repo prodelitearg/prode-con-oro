@@ -90,7 +90,7 @@ function PartidosPage() {
       const [{ data: m }, { data: p }] = await Promise.all([
         supabase
           .from("matches")
-          .select("id,home_team,home_short,home_color,away_team,away_short,away_color,matchday_id")
+          .select("id,home_team,home_short,home_color,away_team,away_short,away_color,matchday_id,kickoff")
           .eq("matchday_id", activeMd)
           .order("kickoff", { ascending: true }),
         supabase
@@ -143,6 +143,21 @@ function PartidosPage() {
 
   const activeMatchday = filteredMatchdays.find((m) => m.id === activeMd);
   const activeTournamentName = tournaments.find((t) => t.id === activeTournament)?.name ?? "Liga";
+
+  // Agrupar partidos por día
+  const matchesByDay = useMemo(() => {
+    const groups = new Map<string, { label: string; items: MatchRow[] }>();
+    for (const m of matches) {
+      const d = m.kickoff ? new Date(m.kickoff) : null;
+      const key = d ? d.toISOString().slice(0, 10) : "sin-fecha";
+      const label = d
+        ? d.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" })
+        : "Sin fecha";
+      if (!groups.has(key)) groups.set(key, { label, items: [] });
+      groups.get(key)!.items.push(m);
+    }
+    return Array.from(groups.entries()).sort(([a], [b]) => a.localeCompare(b));
+  }, [matches]);
 
   return (
     <div className="app-wrap">
@@ -217,15 +232,22 @@ function PartidosPage() {
             Los partidos de esta fecha se cargarán próximamente ⚽
           </div>
         )}
-        {matches.map((m, i) => (
-          <MatchCard
-            key={m.id}
-            match={m}
-            homeScore={scores[m.id]?.h ?? ""}
-            awayScore={scores[m.id]?.a ?? ""}
-            onChange={handleScore}
-            highlight={i === 0}
-          />
+        {matchesByDay.map(([key, group], gi) => (
+          <div key={key} className="mb-3">
+            <div className="day-header">
+              {group.label}
+            </div>
+            {group.items.map((m, i) => (
+              <MatchCard
+                key={m.id}
+                match={m}
+                homeScore={scores[m.id]?.h ?? ""}
+                awayScore={scores[m.id]?.a ?? ""}
+                onChange={handleScore}
+                highlight={gi === 0 && i === 0}
+              />
+            ))}
+          </div>
         ))}
       </div>
 

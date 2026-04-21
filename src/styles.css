@@ -377,6 +377,19 @@
   .match-card:hover { border-color: oklch(0.80 0.155 88 / 0.25); background: var(--card-2); }
   .match-card.is-highlight { border-color: oklch(0.80 0.155 88 / 0.45); box-shadow: 0 0 20px oklch(0.80 0.155 88 / 0.10); }
 
+  /* Day header (group of matches) */
+  .day-header {
+    font-family: var(--font-display);
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--primary);
+    padding: 0.5rem 0.25rem 0.4rem;
+    border-bottom: 1px solid oklch(0.80 0.155 88 / 0.18);
+    margin-bottom: 0.5rem;
+  }
+
   /* Badge equipo */
   .team-badge {
     width: 2.25rem;
