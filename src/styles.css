@@ -334,11 +334,11 @@
 
   /* Score box (predicción) */
   .score-box {
-    width: 3.5rem;
-    height: 3.5rem;
+    width: 2.5rem;
+    height: 2.5rem;
     background: oklch(0.13 0.04 262);
     border: 2px solid var(--border);
-    border-radius: 0.7rem;
+    border-radius: 0.55rem;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -355,7 +355,7 @@
     border: none;
     outline: none;
     text-align: center;
-    font-size: 1.5rem;
+    font-size: 1.05rem;
     font-weight: 800;
     color: var(--foreground);
     font-family: var(--font-display);
@@ -368,10 +368,10 @@
     justify-content: space-between;
     background: var(--card);
     border: 1px solid var(--border);
-    border-radius: 0.875rem;
-    padding: 1rem 1.125rem;
-    margin-bottom: 0.625rem;
-    gap: 0.625rem;
+    border-radius: 0.75rem;
+    padding: 0.55rem 0.7rem;
+    margin-bottom: 0.5rem;
+    gap: 0.4rem;
     transition: all .25s;
   }
   .match-card:hover { border-color: oklch(0.80 0.155 88 / 0.25); background: var(--card-2); }
@@ -379,14 +379,14 @@
 
   /* Badge equipo */
   .team-badge {
-    width: 2.75rem;
-    height: 2.75rem;
+    width: 2.25rem;
+    height: 2.25rem;
     border-radius: 0.4rem;
     display: flex;
     align-items: center;
     justify-content: center;
     font-family: var(--font-display);
-    font-size: 0.8rem;
+    font-size: 0.65rem;
     font-weight: 800;
     letter-spacing: 0.02em;
     flex-shrink: 0;
@@ -419,17 +419,17 @@
   /* FAB para guardar */
   .save-fab {
     position: fixed;
-    bottom: 5.125rem;
-    right: 1.125rem;
+    bottom: 5rem;
+    right: 1rem;
     background: var(--primary);
     color: var(--primary-foreground);
     border: none;
-    padding: 0.85rem 1.25rem;
-    border-radius: 0.75rem;
+    padding: 0.55rem 0.9rem;
+    border-radius: 0.6rem;
     font-family: var(--font-display);
-    font-size: 0.95rem;
+    font-size: 0.75rem;
     font-weight: 800;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.05em;
     text-transform: uppercase;
     cursor: pointer;
     box-shadow: var(--shadow-gold-strong);
