@@ -6,6 +6,7 @@ import { Logo } from "@/components/prodelite/Logo";
 import { useAuth } from "@/contexts/AuthContext";
 import { useServerFn } from "@tanstack/react-start";
 import { syncMatchdayFromApi } from "@/server/sync-football";
+import { promoteToAdminFn, revokeAdminFn } from "@/server/admins";
 
 export const Route = createFileRoute("/superadmin")({
   head: () => ({
