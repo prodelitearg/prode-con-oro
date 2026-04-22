@@ -158,7 +158,14 @@ function SyncApi() {
     setBusy(true);
     setLastResult(null);
     try {
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess.session?.access_token;
+      if (!token) {
+        setBusy(false);
+        return toast.error("Sesión expirada, volvé a iniciar sesión");
+      }
       const res = await syncFn({
+        headers: { Authorization: `Bearer ${token}` },
         data: {
           tournamentId: tid,
           fromDate: from,
@@ -177,7 +184,14 @@ function SyncApi() {
         setLastResult(msg);
       }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      let msg: string;
+      if (e instanceof Response) {
+        msg = `${e.status}: ${await e.text().catch(() => e.statusText)}`;
+      } else if (e instanceof Error) {
+        msg = e.message;
+      } else {
+        msg = String(e);
+      }
       toast.error("Error: " + msg);
       setLastResult("❌ " + msg);
     } finally {
