@@ -6,6 +6,7 @@ import { Logo } from "@/components/prodelite/Logo";
 import { useAuth } from "@/contexts/AuthContext";
 import { useServerFn } from "@tanstack/react-start";
 import { syncMatchdayFromApi } from "@/server/sync-football";
+import { promoteToAdminFn, revokeAdminFn } from "@/server/admins";
 
 export const Route = createFileRoute("/superadmin")({
   head: () => ({
@@ -272,28 +273,123 @@ function SyncApi() {
   );
 }
 
+interface AdminRow {
+  user_id: string;
+  nombre: string;
+  apellido: string;
+  email: string | null;
+  provincia: string | null;
+  localidad: string | null;
+}
+
 function Admins() {
-  const demo = [
-    { n: "Carlos Méndez", loc: "San Rafael, Mendoza", afil: 28, nivel: "Oro", com: "12%" },
-    { n: "Lucía Torres", loc: "Casilda, Santa Fe", afil: 14, nivel: "Plata", com: "10%" },
-    { n: "Rodrigo Vega", loc: "Mendoza Capital", afil: 6, nivel: "Bronce", com: "8%" },
-  ];
+  const promote = useServerFn(promoteToAdminFn);
+  const revoke = useServerFn(revokeAdminFn);
+  const [admins, setAdmins] = useState<AdminRow[]>([]);
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const reload = async () => {
+    setLoading(true);
+    const { data: roleRows, error: rErr } = await supabase
+      .from("user_roles")
+      .select("user_id")
+      .eq("role", "admin");
+    if (rErr) {
+      toast.error(rErr.message);
+      setLoading(false);
+      return;
+    }
+    const ids = (roleRows ?? []).map((r) => r.user_id);
+    if (ids.length === 0) {
+      setAdmins([]);
+      setLoading(false);
+      return;
+    }
+    const { data: profs, error: pErr } = await supabase
+      .from("profiles")
+      .select("user_id,nombre,apellido,email,provincia,localidad")
+      .in("user_id", ids);
+    if (pErr) toast.error(pErr.message);
+    setAdmins(((profs ?? []) as AdminRow[]).sort((a, b) =>
+      `${a.nombre} ${a.apellido}`.localeCompare(`${b.nombre} ${b.apellido}`)
+    ));
+    setLoading(false);
+  };
+
+  useEffect(() => { void reload(); }, []);
+
+  const handlePromote = async (e: FormEvent) => {
+    e.preventDefault();
+    const v = email.trim();
+    if (!v) return toast.error("Ingresá un email");
+    setBusy(true);
+    try {
+      const res = await promote({ data: { email: v } });
+      if (res.alreadyAdmin) toast.info(`${res.email} ya era administrador`);
+      else toast.success(`${res.email} promovido a administrador`);
+      setEmail("");
+      await reload();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(msg);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRevoke = async (a: AdminRow) => {
+    if (!confirm(`Quitar rol admin a ${a.nombre} ${a.apellido}?`)) return;
+    try {
+      await revoke({ data: { userId: a.user_id } });
+      toast.success("Rol admin removido");
+      await reload();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(msg);
+    }
+  };
+
   return (
     <>
-      <div className="section-label !mt-0">Administradores</div>
-      <button className="btn-outline mb-3" type="button">+ Nuevo administrador</button>
-      {demo.map((a, i) => (
-        <div key={i} className="card-base flex items-center justify-between mb-2 !py-3">
-          <div>
-            <div className="text-sm font-bold text-foreground">{a.n}</div>
-            <div className="text-[0.7rem] text-muted-foreground mt-0.5">
-              {a.loc} · {a.afil} afiliados · {a.nivel} · {a.com}
+      <div className="section-label !mt-0">Crear administrador</div>
+      <form onSubmit={handlePromote} className="card-base mb-4 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
+        <input
+          className="field-input"
+          type="email"
+          placeholder="Email del usuario a promover"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          maxLength={255}
+          required
+        />
+        <button type="submit" className="btn-gold !py-2" disabled={busy}>
+          {busy ? "Promoviendo…" : "+ Hacer admin"}
+        </button>
+      </form>
+      <div className="text-[0.7rem] text-muted-foreground -mt-2 mb-3">
+        El usuario debe estar registrado en la app. Buscamos por email exacto.
+      </div>
+
+      <div className="section-label">Administradores actuales ({admins.length})</div>
+      {loading && <div className="text-sm text-muted-foreground">Cargando…</div>}
+      {!loading && admins.length === 0 && (
+        <div className="text-sm text-muted-foreground">Todavía no hay administradores.</div>
+      )}
+      {admins.map((a) => (
+        <div key={a.user_id} className="card-base flex items-center justify-between mb-2 !py-3 gap-2">
+          <div className="min-w-0">
+            <div className="text-sm font-bold text-foreground truncate">
+              {a.nombre} {a.apellido}
+            </div>
+            <div className="text-[0.7rem] text-muted-foreground mt-0.5 truncate">
+              {a.email ?? "—"} · {[a.localidad, a.provincia].filter(Boolean).join(", ") || "Sin ubicación"}
             </div>
           </div>
-          <div className="flex gap-1.5">
-            <button type="button" className="btn-mini">Ver</button>
-            <button type="button" className="btn-mini is-danger">Suspender</button>
-          </div>
+          <button type="button" className="btn-mini is-danger" onClick={() => handleRevoke(a)}>
+            Quitar admin
+          </button>
         </div>
       ))}
     </>
@@ -542,34 +638,106 @@ function Torneos() {
   );
 }
 
+interface UsuarioRow {
+  user_id: string;
+  nombre: string;
+  apellido: string;
+  dni: string | null;
+  email: string | null;
+  provincia: string | null;
+  localidad: string | null;
+  created_at: string;
+}
+
 function Usuarios() {
-  const demo = [
-    { n: "Juan García", dni: "32.145.678", admin: "Carlos M.", ret: 818, bonus: 200, status: "activo" },
-    { n: "Claudia López", dni: "28.901.234", admin: "Carlos M.", ret: 1250, bonus: 0, status: "retiro pend." },
-    { n: "Patricia Gómez", dni: "29.012.345", admin: "Rodrigo V.", ret: 0, bonus: 80, status: "sin retirables" },
-  ];
+  const [users, setUsers] = useState<UsuarioRow[]>([]);
+  const [credits, setCredits] = useState<Record<string, { retirables: number; bonus: number }>>({});
+  const [roles, setRoles] = useState<Record<string, string[]>>({});
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  const reload = async () => {
+    setLoading(true);
+    const [{ data: profs, error: pErr }, { data: cr }, { data: rs }] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select("user_id,nombre,apellido,dni,email,provincia,localidad,created_at")
+        .order("created_at", { ascending: false })
+        .limit(500),
+      supabase.from("user_credits").select("user_id,retirables,bonus"),
+      supabase.from("user_roles").select("user_id,role"),
+    ]);
+    if (pErr) toast.error(pErr.message);
+    setUsers(((profs ?? []) as UsuarioRow[]));
+    const cMap: Record<string, { retirables: number; bonus: number }> = {};
+    for (const c of (cr ?? []) as { user_id: string; retirables: number; bonus: number }[]) {
+      cMap[c.user_id] = { retirables: c.retirables, bonus: c.bonus };
+    }
+    setCredits(cMap);
+    const rMap: Record<string, string[]> = {};
+    for (const r of (rs ?? []) as { user_id: string; role: string }[]) {
+      (rMap[r.user_id] ??= []).push(r.role);
+    }
+    setRoles(rMap);
+    setLoading(false);
+  };
+
+  useEffect(() => { void reload(); }, []);
+
+  const filtered = users.filter((u) => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (
+      u.nombre.toLowerCase().includes(q) ||
+      u.apellido.toLowerCase().includes(q) ||
+      (u.email ?? "").toLowerCase().includes(q) ||
+      (u.dni ?? "").toLowerCase().includes(q)
+    );
+  });
+
   return (
     <>
-      <div className="section-label !mt-0">Usuarios registrados</div>
-      {demo.map((u, i) => (
-        <div key={i} className="card-base flex items-center justify-between mb-2 !py-3">
-          <div>
-            <div className="text-sm font-bold text-foreground">{u.n}</div>
-            <div className="text-[0.7rem] text-muted-foreground mt-0.5">DNI {u.dni} · Admin: {u.admin}</div>
+      <div className="section-label !mt-0">Usuarios registrados ({users.length})</div>
+      <div className="card-base mb-3 grid grid-cols-[1fr_auto] gap-2">
+        <input
+          className="field-input"
+          placeholder="Buscar por nombre, email o DNI"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <button type="button" className="btn-mini" onClick={() => void reload()}>↻</button>
+      </div>
+      {loading && <div className="text-sm text-muted-foreground">Cargando…</div>}
+      {!loading && filtered.length === 0 && (
+        <div className="text-sm text-muted-foreground">No hay usuarios{search ? " que coincidan con la búsqueda" : ""}.</div>
+      )}
+      {filtered.map((u) => {
+        const c = credits[u.user_id] ?? { retirables: 0, bonus: 0 };
+        const userRoles = roles[u.user_id] ?? [];
+        const isAdmin = userRoles.includes("admin");
+        const isSuper = userRoles.includes("superadmin");
+        return (
+          <div key={u.user_id} className="card-base flex items-center justify-between mb-2 !py-3 gap-2">
+            <div className="min-w-0">
+              <div className="text-sm font-bold text-foreground truncate flex items-center gap-1.5">
+                {u.nombre} {u.apellido}
+                {isSuper && <span className="tag tag-danger">super</span>}
+                {isAdmin && !isSuper && <span className="tag tag-gold">admin</span>}
+              </div>
+              <div className="text-[0.7rem] text-muted-foreground mt-0.5 truncate">
+                {u.email ?? "—"} · DNI {u.dni ?? "—"}
+              </div>
+              <div className="text-[0.65rem] text-muted-foreground mt-0.5">
+                Alta: {new Date(u.created_at).toLocaleDateString("es-AR")}
+              </div>
+            </div>
+            <div className="text-right shrink-0">
+              <div className="font-display text-xs font-extrabold text-success">{c.retirables} cr</div>
+              <div className="font-display text-[0.65rem] font-bold text-warning mt-0.5">{c.bonus} bonus</div>
+            </div>
           </div>
-          <div className="text-right">
-            <div className="font-display text-xs font-extrabold text-success">{u.ret} cr ret.</div>
-            <div className="font-display text-xs font-bold text-warning mt-0.5">{u.bonus} cr bonus</div>
-            <span
-              className={`tag mt-1 inline-block ${
-                u.status === "activo" ? "tag-success" : u.status.includes("retiro") ? "tag-warning" : "tag-danger"
-              }`}
-            >
-              {u.status}
-            </span>
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </>
   );
 }
