@@ -9,7 +9,10 @@ const SetRoleSchema = z.object({
   role: z.enum(["user", "admin", "superadmin"]),
 });
 
-async function assertSuperadmin(supabase: ReturnType<typeof import("@supabase/supabase-js").createClient>, userId: string) {
+async function assertSuperadmin(
+  supabase: { from: (t: string) => { select: (q: string) => { eq: (k: string, v: string) => Promise<{ data: { role: string }[] | null; error: { message: string } | null }> } } },
+  userId: string
+) {
   const { data, error } = await supabase
     .from("user_roles")
     .select("role")
