@@ -9,16 +9,13 @@ const SetRoleSchema = z.object({
   role: z.enum(["user", "admin", "superadmin"]),
 });
 
-async function assertSuperadmin(
-  supabase: { from: (t: string) => { select: (q: string) => { eq: (k: string, v: string) => Promise<{ data: { role: string }[] | null; error: { message: string } | null }> } } },
-  userId: string
-) {
-  const { data, error } = await supabase
+async function assertSuperadmin(userId: string) {
+  const { data, error } = await supabaseAdmin
     .from("user_roles")
     .select("role")
     .eq("user_id", userId);
   if (error) throw new Error(error.message);
-  const isSuper = (data ?? []).some((r: { role: string }) => r.role === "superadmin");
+  const isSuper = (data ?? []).some((r) => r.role === "superadmin");
   if (!isSuper) throw new Error("Solo superadmin puede ejecutar esta acción");
 }
 
@@ -26,8 +23,8 @@ export const promoteToAdminFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => PromoteSchema.parse(input))
   .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
-    await assertSuperadmin(supabase, userId);
+    const { userId } = context;
+    await assertSuperadmin(userId);
 
     // Find user by email in profiles
     const { data: profile, error: pErr } = await supabaseAdmin
@@ -62,8 +59,8 @@ export const revokeAdminFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => SetRoleSchema.pick({ userId: true }).parse(input))
   .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
-    await assertSuperadmin(supabase, userId);
+    const { userId } = context;
+    await assertSuperadmin(userId);
     const { error } = await supabaseAdmin
       .from("user_roles")
       .delete()
