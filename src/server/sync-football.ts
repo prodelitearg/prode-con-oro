@@ -103,11 +103,35 @@ export const syncMatchdayFromApi = createServerFn({ method: "POST" })
       const body = await apiRes.text();
       return { ok: false as const, error: `API error ${apiRes.status}: ${body.slice(0, 200)}` };
     }
-    const apiJson = (await apiRes.json()) as { response: ApiFixture[]; errors?: unknown };
-    const fixtures = apiJson.response ?? [];
+    const apiJson = (await apiRes.json()) as {
+      response?: ApiFixture[];
+      errors?: unknown;
+      results?: number;
+    };
 
+    // API-Football returns 200 even on auth/quota errors. The `errors` field can be:
+    // - an array (empty when OK), or
+    // - an object like { token: "Invalid API key" } / { requests: "You have exceeded ..." }
+    const errs = apiJson.errors;
+    const hasErrors =
+      (Array.isArray(errs) && errs.length > 0) ||
+      (errs !== null && typeof errs === "object" && Object.keys(errs as object).length > 0);
+    if (hasErrors) {
+      const detail =
+        Array.isArray(errs)
+          ? errs.map((e) => (typeof e === "string" ? e : JSON.stringify(e))).join(" · ")
+          : Object.entries(errs as Record<string, unknown>)
+              .map(([k, v]) => `${k}: ${String(v)}`)
+              .join(" · ");
+      return { ok: false as const, error: `API-Football: ${detail}` };
+    }
+
+    const fixtures = Array.isArray(apiJson.response) ? apiJson.response : [];
     if (fixtures.length === 0) {
-      return { ok: false as const, error: "No se encontraron partidos en ese rango" };
+      return {
+        ok: false as const,
+        error: `No se encontraron partidos para liga ${tournament.external_id} temporada ${data.season} entre ${data.fromDate} y ${data.toDate}. Verificá que la temporada y el rango sean correctos.`,
+      };
     }
 
     // Group by round (matchday number)

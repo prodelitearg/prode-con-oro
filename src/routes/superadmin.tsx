@@ -168,8 +168,9 @@ function SyncApi() {
         },
       });
       if (!res.ok) {
-        toast.error(res.error);
-        setLastResult("❌ " + res.error);
+        const msg = res.error || "Error desconocido al sincronizar";
+        toast.error(msg);
+        setLastResult("❌ " + msg);
       } else {
         const msg = `✓ ${res.totalFixtures} partidos · ${res.createdMatchdays} fechas nuevas · ${res.upsertedMatches} partidos creados · ${res.updatedScores} resultados actualizados · Fechas: ${res.rounds.join(", ")}`;
         toast.success("Sincronización completa");
