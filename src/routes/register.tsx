@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate, redirect } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Logo } from "@/components/prodelite/Logo";
 import { supabase } from "@/integrations/supabase/client";
@@ -11,6 +11,9 @@ export const Route = createFileRoute("/register")({
       { title: "Crear cuenta — PRODELITE" },
       { name: "description", content: "Registrate en PRODELITE y empezá a pronosticar partidos." },
     ],
+  }),
+  validateSearch: (search: Record<string, unknown>) => ({
+    ref: typeof search.ref === "string" ? search.ref : "",
   }),
   beforeLoad: async () => {
     const { data } = await supabase.auth.getSession();
@@ -33,6 +36,7 @@ interface FormState {
 
 function Register() {
   const navigate = useNavigate();
+  const { ref: refFromUrl } = Route.useSearch();
   const [f, setF] = useState<FormState>({
     nombre: "",
     apellido: "",
@@ -42,9 +46,13 @@ function Register() {
     provincia: "",
     localidad: "",
     pass: "",
-    ref: "",
+    ref: refFromUrl ?? "",
   });
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (refFromUrl) setF((p) => ({ ...p, ref: refFromUrl }));
+  }, [refFromUrl]);
 
   const u = (k: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setF((p) => ({ ...p, [k]: e.target.value }));
