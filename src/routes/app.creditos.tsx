@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,10 +15,10 @@ export const Route = createFileRoute("/app/creditos")({
 });
 
 const PAQUETES = [
-  { id: "s", name: "Starter", creds: 100, bonus: 0, price: "$5.000" },
-  { id: "p", name: "Plus", creds: 300, bonus: 30, price: "$13.500" },
-  { id: "pr", name: "Pro", creds: 500, bonus: 80, price: "$21.000" },
-  { id: "f", name: "Full", creds: 1000, bonus: 200, price: "$40.000" },
+  { id: "starter", name: "Starter", creds: 100, bonus: 0, ars: 5000, price: "$5.000" },
+  { id: "plus", name: "Plus", creds: 300, bonus: 30, ars: 13500, price: "$13.500" },
+  { id: "pro", name: "Pro", creds: 500, bonus: 80, ars: 21000, price: "$21.000" },
+  { id: "full", name: "Full", creds: 1000, bonus: 200, ars: 40000, price: "$40.000" },
 ] as const;
 
 function CreditosPage() {
@@ -31,6 +31,9 @@ function CreditosPage() {
   const [retiro, setRetiro] = useState("");
   const [alias, setAlias] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [receipt, setReceipt] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   type WithdrawalRow = {
     id: string;
@@ -42,6 +45,18 @@ function CreditosPage() {
     processed_at: string | null;
   };
   const [history, setHistory] = useState<WithdrawalRow[]>([]);
+
+  type PurchaseRow = {
+    id: string;
+    package_name: string;
+    credits: number;
+    bonus: number;
+    amount_ars: number;
+    status: string;
+    notes: string | null;
+    created_at: string;
+  };
+  const [purchases, setPurchases] = useState<PurchaseRow[]>([]);
 
   const loadHistory = async () => {
     if (!user) return;
