@@ -12,9 +12,10 @@ export const Route = createFileRoute("/register")({
       { name: "description", content: "Registrate en PRODELITE y empezá a pronosticar partidos." },
     ],
   }),
-  validateSearch: (search: Record<string, unknown>) => ({
-    ref: typeof search.ref === "string" ? search.ref : "",
-  }),
+  validateSearch: (search: Record<string, unknown>): { ref?: string } => {
+    const ref = typeof search.ref === "string" && search.ref.length > 0 ? search.ref : undefined;
+    return ref ? { ref } : {};
+  },
   beforeLoad: async () => {
     const { data } = await supabase.auth.getSession();
     if (data.session) throw redirect({ to: "/app/partidos" });
@@ -36,7 +37,7 @@ interface FormState {
 
 function Register() {
   const navigate = useNavigate();
-  const { ref: refFromUrl } = Route.useSearch();
+  const { ref: refFromUrl } = Route.useSearch() as { ref?: string };
   const [f, setF] = useState<FormState>({
     nombre: "",
     apellido: "",
