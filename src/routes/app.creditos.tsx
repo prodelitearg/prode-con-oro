@@ -237,23 +237,39 @@ function CreditosPage() {
       </div>
 
       {selected && (
-        <div className="card-base mb-5">
+        <form onSubmit={handleCompra} className="card-base mb-5">
           <div className="rounded-lg border border-success/15 bg-success/[0.06] px-3.5 py-3 mb-3.5 text-sm text-muted-foreground leading-relaxed">
-            Los <strong className="text-success">{selected.creds} cr principales</strong> son retirables.
+            Vas a recibir <strong className="text-success">{selected.creds} cr retirables</strong>
             {selected.bonus > 0 && (
-              <>
-                {" "}
-                Los <strong className="text-warning">{selected.bonus} cr bonus</strong> son solo para jugar.
-              </>
+              <> y <strong className="text-warning">{selected.bonus} cr bonus</strong> (solo para jugar)</>
+            )}
+            . Total a transferir: <strong className="text-foreground">{selected.price} ARS</strong>.
+          </div>
+          <div className="mb-3">
+            <label className="field-label" htmlFor="receipt">
+              Foto del comprobante de transferencia
+            </label>
+            <input
+              id="receipt"
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,application/pdf"
+              className="field-input !p-2 file:mr-2 file:rounded-md file:border-0 file:bg-primary/15 file:px-2 file:py-1 file:text-xs file:font-bold file:text-primary"
+              onChange={(e) => setReceipt(e.target.files?.[0] ?? null)}
+            />
+            {receipt && (
+              <p className="mt-1.5 text-[0.7rem] text-muted-foreground truncate">
+                {receipt.name} · {(receipt.size / 1024).toFixed(0)} KB
+              </p>
             )}
           </div>
-          <button type="button" className="btn-gold" onClick={handleCompra}>
-            Pagar con Mercado Pago · {selected.price}
+          <button type="submit" className="btn-gold" disabled={uploading || !receipt}>
+            {uploading ? "Enviando…" : `Enviar solicitud · ${selected.price}`}
           </button>
           <p className="mt-2 text-center text-xs text-muted-foreground">
-            También podés transferir y avisar a tu administrador.
+            Tu administrador revisará el comprobante y acreditará los créditos.
           </p>
-        </div>
+        </form>
       )}
 
       <h2 className="section-label">Solicitar retiro</h2>
