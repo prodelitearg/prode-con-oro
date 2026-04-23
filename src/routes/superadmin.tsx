@@ -6,7 +6,7 @@ import { Logo } from "@/components/prodelite/Logo";
 import { useAuth } from "@/contexts/AuthContext";
 import { useServerFn } from "@tanstack/react-start";
 import { syncMatchdayFromApi } from "@/server/sync-football";
-import { promoteToAdminFn, revokeAdminFn } from "@/server/admins";
+import { promoteToAdminFn, promoteUserToAdminFn, revokeAdminFn } from "@/server/admins";
 
 export const Route = createFileRoute("/superadmin")({
   head: () => ({
@@ -660,11 +660,14 @@ interface UsuarioRow {
 }
 
 function Usuarios() {
+  const promoteUser = useServerFn(promoteUserToAdminFn);
+  const revoke = useServerFn(revokeAdminFn);
   const [users, setUsers] = useState<UsuarioRow[]>([]);
   const [credits, setCredits] = useState<Record<string, { retirables: number; bonus: number }>>({});
   const [roles, setRoles] = useState<Record<string, string[]>>({});
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [roleBusy, setRoleBusy] = useState<string | null>(null);
 
   const reload = async () => {
     setLoading(true);
@@ -705,6 +708,38 @@ function Usuarios() {
     );
   });
 
+  const displayName = (u: UsuarioRow) => `${u.nombre} ${u.apellido}`.trim() || u.email || "este usuario";
+
+  const handleMakeAdmin = async (u: UsuarioRow) => {
+    if (!confirm(`¿Confirmás que querés promover a ${displayName(u)} como Administrador?`)) return;
+    setRoleBusy(u.user_id);
+    try {
+      await promoteUser({ data: { userId: u.user_id } });
+      setRoles((prev) => ({ ...prev, [u.user_id]: Array.from(new Set([...(prev[u.user_id] ?? []), "admin"])) }));
+      toast.success(`${displayName(u)} ahora es ADMIN`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(msg);
+    } finally {
+      setRoleBusy(null);
+    }
+  };
+
+  const handleRemoveAdmin = async (u: UsuarioRow) => {
+    if (!confirm(`¿Confirmás que querés quitar el rol Administrador a ${displayName(u)}?`)) return;
+    setRoleBusy(u.user_id);
+    try {
+      await revoke({ data: { userId: u.user_id } });
+      setRoles((prev) => ({ ...prev, [u.user_id]: (prev[u.user_id] ?? []).filter((role) => role !== "admin") }));
+      toast.success(`${displayName(u)} vuelve a usuario normal`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(msg);
+    } finally {
+      setRoleBusy(null);
+    }
+  };
+
   return (
     <>
       <div className="section-label !mt-0">Usuarios registrados ({users.length})</div>
@@ -741,9 +776,21 @@ function Usuarios() {
                 Alta: {new Date(u.created_at).toLocaleDateString("es-AR")}
               </div>
             </div>
-            <div className="text-right shrink-0">
-              <div className="font-display text-xs font-extrabold text-success">{c.retirables} cr</div>
-              <div className="font-display text-[0.65rem] font-bold text-warning mt-0.5">{c.bonus} bonus</div>
+            <div className="text-right shrink-0 flex flex-col items-end gap-1">
+              <div>
+                <div className="font-display text-xs font-extrabold text-success">{c.retirables} cr</div>
+                <div className="font-display text-[0.65rem] font-bold text-warning mt-0.5">{c.bonus} bonus</div>
+              </div>
+              {!isSuper && (
+                <button
+                  type="button"
+                  className={`btn-role-action ${isAdmin ? "is-danger" : "is-gold"}`}
+                  disabled={roleBusy === u.user_id}
+                  onClick={() => (isAdmin ? void handleRemoveAdmin(u) : void handleMakeAdmin(u))}
+                >
+                  {roleBusy === u.user_id ? "…" : isAdmin ? "Quitar Admin" : "Hacer Admin"}
+                </button>
+              )}
             </div>
           </div>
         );

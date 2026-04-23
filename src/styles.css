@@ -206,6 +206,24 @@
   .btn-mini:hover { border-color: var(--primary); color: var(--primary); }
   .btn-mini.is-active { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
   .btn-mini.is-danger:hover { border-color: var(--destructive); color: var(--destructive); }
+  .btn-role-action {
+    border-radius: 999px;
+    padding: 0.16rem 0.5rem;
+    font-family: var(--font-display);
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    line-height: 1.1;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all .2s;
+    white-space: nowrap;
+  }
+  .btn-role-action:disabled { opacity: .55; cursor: not-allowed; }
+  .btn-role-action.is-gold { background: oklch(0.80 0.155 88 / 0.12); color: var(--primary); border: 1px solid oklch(0.80 0.155 88 / 0.30); }
+  .btn-role-action.is-gold:hover { background: oklch(0.80 0.155 88 / 0.20); }
+  .btn-role-action.is-danger { background: oklch(0.65 0.22 25 / 0.10); color: var(--destructive); border: 1px solid oklch(0.65 0.22 25 / 0.25); }
+  .btn-role-action.is-danger:hover { background: oklch(0.65 0.22 25 / 0.18); }
 
   /* Form */
   .field-label {
