@@ -159,10 +159,6 @@ function CreditosPage() {
     await loadHistory();
   };
 
-  const handleCompra = () => {
-    toast.info("Próximamente: integración con Mercado Pago");
-  };
-
   return (
     <div className="app-wrap">
       <h1 className="section-label !mt-2">Mi saldo</h1>
