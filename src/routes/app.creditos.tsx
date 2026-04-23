@@ -60,13 +60,22 @@ function CreditosPage() {
 
   const loadHistory = async () => {
     if (!user) return;
-    const { data } = await supabase
-      .from("withdrawals" as never)
-      .select("id, amount, alias, status, notes, created_at, processed_at")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(20);
-    setHistory((data ?? []) as unknown as WithdrawalRow[]);
+    const [{ data: w }, { data: p }] = await Promise.all([
+      supabase
+        .from("withdrawals" as never)
+        .select("id, amount, alias, status, notes, created_at, processed_at")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(20),
+      supabase
+        .from("credit_purchase_requests" as never)
+        .select("id, package_name, credits, bonus, amount_ars, status, notes, created_at")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(20),
+    ]);
+    setHistory((w ?? []) as unknown as WithdrawalRow[]);
+    setPurchases((p ?? []) as unknown as PurchaseRow[]);
   };
 
   useEffect(() => {
@@ -75,6 +84,48 @@ function CreditosPage() {
   }, [user?.id]);
 
   const selected = PAQUETES.find((p) => p.id === pkg);
+
+  const handleCompra = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selected || !user) return;
+    if (!receipt) {
+      toast.error("Subí la foto del comprobante");
+      return;
+    }
+    if (receipt.size > 5 * 1024 * 1024) {
+      toast.error("El archivo debe pesar menos de 5 MB");
+      return;
+    }
+    setUploading(true);
+    const ext = receipt.name.split(".").pop()?.toLowerCase() || "jpg";
+    const path = `${user.id}/${Date.now()}-${selected.id}.${ext}`;
+    const { error: upErr } = await supabase.storage
+      .from("credit-receipts")
+      .upload(path, receipt, { contentType: receipt.type, upsert: false });
+    if (upErr) {
+      setUploading(false);
+      toast.error(upErr.message ?? "No se pudo subir el comprobante");
+      return;
+    }
+    const { error } = await supabase.rpc("request_credit_purchase" as never, {
+      _package_id: selected.id,
+      _package_name: selected.name,
+      _credits: selected.creds,
+      _bonus: selected.bonus,
+      _amount_ars: selected.ars,
+      _receipt_url: path,
+    } as never);
+    setUploading(false);
+    if (error) {
+      toast.error(error.message ?? "No se pudo crear la solicitud");
+      return;
+    }
+    toast.success("Solicitud enviada — tu administrador la aprobará en breve");
+    setPkg(null);
+    setReceipt(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    await loadHistory();
+  };
 
   const handleRetiro = async (e: React.FormEvent) => {
     e.preventDefault();
