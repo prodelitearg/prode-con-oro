@@ -8,6 +8,7 @@ const SetRoleSchema = z.object({
   userId: z.string().uuid(),
   role: z.enum(["user", "admin", "superadmin"]),
 });
+const SetAdminSchema = SetRoleSchema.pick({ userId: true });
 
 async function assertSuperadmin(userId: string) {
   const { data, error } = await supabaseAdmin
@@ -57,7 +58,7 @@ export const promoteToAdminFn = createServerFn({ method: "POST" })
 
 export const revokeAdminFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => SetRoleSchema.pick({ userId: true }).parse(input))
+  .inputValidator((input: unknown) => SetAdminSchema.parse(input))
   .handler(async ({ data, context }) => {
     const { userId } = context;
     await assertSuperadmin(userId);
@@ -68,4 +69,30 @@ export const revokeAdminFn = createServerFn({ method: "POST" })
       .eq("role", "admin");
     if (error) throw new Error(error.message);
     return { ok: true };
+  });
+
+export const promoteUserToAdminFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => SetAdminSchema.parse(input))
+  .handler(async ({ data, context }) => {
+    const { userId } = context;
+    await assertSuperadmin(userId);
+
+    const { data: targetRoles, error: rolesErr } = await supabaseAdmin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", data.userId);
+    if (rolesErr) throw new Error(rolesErr.message);
+    if ((targetRoles ?? []).some((r) => r.role === "superadmin")) {
+      throw new Error("No se puede modificar un superadmin");
+    }
+    if ((targetRoles ?? []).some((r) => r.role === "admin")) {
+      return { ok: true, alreadyAdmin: true };
+    }
+
+    const { error } = await supabaseAdmin
+      .from("user_roles")
+      .insert({ user_id: data.userId, role: "admin" });
+    if (error) throw new Error(error.message);
+    return { ok: true, alreadyAdmin: false };
   });
