@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,10 +15,10 @@ export const Route = createFileRoute("/app/creditos")({
 });
 
 const PAQUETES = [
-  { id: "s", name: "Starter", creds: 100, bonus: 0, price: "$5.000" },
-  { id: "p", name: "Plus", creds: 300, bonus: 30, price: "$13.500" },
-  { id: "pr", name: "Pro", creds: 500, bonus: 80, price: "$21.000" },
-  { id: "f", name: "Full", creds: 1000, bonus: 200, price: "$40.000" },
+  { id: "starter", name: "Starter", creds: 100, bonus: 0, ars: 5000, price: "$5.000" },
+  { id: "plus", name: "Plus", creds: 300, bonus: 30, ars: 13500, price: "$13.500" },
+  { id: "pro", name: "Pro", creds: 500, bonus: 80, ars: 21000, price: "$21.000" },
+  { id: "full", name: "Full", creds: 1000, bonus: 200, ars: 40000, price: "$40.000" },
 ] as const;
 
 function CreditosPage() {
@@ -31,6 +31,9 @@ function CreditosPage() {
   const [retiro, setRetiro] = useState("");
   const [alias, setAlias] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [receipt, setReceipt] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   type WithdrawalRow = {
     id: string;
@@ -43,15 +46,36 @@ function CreditosPage() {
   };
   const [history, setHistory] = useState<WithdrawalRow[]>([]);
 
+  type PurchaseRow = {
+    id: string;
+    package_name: string;
+    credits: number;
+    bonus: number;
+    amount_ars: number;
+    status: string;
+    notes: string | null;
+    created_at: string;
+  };
+  const [purchases, setPurchases] = useState<PurchaseRow[]>([]);
+
   const loadHistory = async () => {
     if (!user) return;
-    const { data } = await supabase
-      .from("withdrawals" as never)
-      .select("id, amount, alias, status, notes, created_at, processed_at")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(20);
-    setHistory((data ?? []) as unknown as WithdrawalRow[]);
+    const [{ data: w }, { data: p }] = await Promise.all([
+      supabase
+        .from("withdrawals" as never)
+        .select("id, amount, alias, status, notes, created_at, processed_at")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(20),
+      supabase
+        .from("credit_purchase_requests" as never)
+        .select("id, package_name, credits, bonus, amount_ars, status, notes, created_at")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(20),
+    ]);
+    setHistory((w ?? []) as unknown as WithdrawalRow[]);
+    setPurchases((p ?? []) as unknown as PurchaseRow[]);
   };
 
   useEffect(() => {
@@ -60,6 +84,48 @@ function CreditosPage() {
   }, [user?.id]);
 
   const selected = PAQUETES.find((p) => p.id === pkg);
+
+  const handleCompra = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selected || !user) return;
+    if (!receipt) {
+      toast.error("Subí la foto del comprobante");
+      return;
+    }
+    if (receipt.size > 5 * 1024 * 1024) {
+      toast.error("El archivo debe pesar menos de 5 MB");
+      return;
+    }
+    setUploading(true);
+    const ext = receipt.name.split(".").pop()?.toLowerCase() || "jpg";
+    const path = `${user.id}/${Date.now()}-${selected.id}.${ext}`;
+    const { error: upErr } = await supabase.storage
+      .from("credit-receipts")
+      .upload(path, receipt, { contentType: receipt.type, upsert: false });
+    if (upErr) {
+      setUploading(false);
+      toast.error(upErr.message ?? "No se pudo subir el comprobante");
+      return;
+    }
+    const { error } = await supabase.rpc("request_credit_purchase" as never, {
+      _package_id: selected.id,
+      _package_name: selected.name,
+      _credits: selected.creds,
+      _bonus: selected.bonus,
+      _amount_ars: selected.ars,
+      _receipt_url: path,
+    } as never);
+    setUploading(false);
+    if (error) {
+      toast.error(error.message ?? "No se pudo crear la solicitud");
+      return;
+    }
+    toast.success("Solicitud enviada — tu administrador la aprobará en breve");
+    setPkg(null);
+    setReceipt(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    await loadHistory();
+  };
 
   const handleRetiro = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,10 +157,6 @@ function CreditosPage() {
     setAlias("");
     await refresh();
     await loadHistory();
-  };
-
-  const handleCompra = () => {
-    toast.info("Próximamente: integración con Mercado Pago");
   };
 
   return (
@@ -175,23 +237,39 @@ function CreditosPage() {
       </div>
 
       {selected && (
-        <div className="card-base mb-5">
+        <form onSubmit={handleCompra} className="card-base mb-5">
           <div className="rounded-lg border border-success/15 bg-success/[0.06] px-3.5 py-3 mb-3.5 text-sm text-muted-foreground leading-relaxed">
-            Los <strong className="text-success">{selected.creds} cr principales</strong> son retirables.
+            Vas a recibir <strong className="text-success">{selected.creds} cr retirables</strong>
             {selected.bonus > 0 && (
-              <>
-                {" "}
-                Los <strong className="text-warning">{selected.bonus} cr bonus</strong> son solo para jugar.
-              </>
+              <> y <strong className="text-warning">{selected.bonus} cr bonus</strong> (solo para jugar)</>
+            )}
+            . Total a transferir: <strong className="text-foreground">{selected.price} ARS</strong>.
+          </div>
+          <div className="mb-3">
+            <label className="field-label" htmlFor="receipt">
+              Foto del comprobante de transferencia
+            </label>
+            <input
+              id="receipt"
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,application/pdf"
+              className="field-input !p-2 file:mr-2 file:rounded-md file:border-0 file:bg-primary/15 file:px-2 file:py-1 file:text-xs file:font-bold file:text-primary"
+              onChange={(e) => setReceipt(e.target.files?.[0] ?? null)}
+            />
+            {receipt && (
+              <p className="mt-1.5 text-[0.7rem] text-muted-foreground truncate">
+                {receipt.name} · {(receipt.size / 1024).toFixed(0)} KB
+              </p>
             )}
           </div>
-          <button type="button" className="btn-gold" onClick={handleCompra}>
-            Pagar con Mercado Pago · {selected.price}
+          <button type="submit" className="btn-gold" disabled={uploading || !receipt}>
+            {uploading ? "Enviando…" : `Enviar solicitud · ${selected.price}`}
           </button>
           <p className="mt-2 text-center text-xs text-muted-foreground">
-            También podés transferir y avisar a tu administrador.
+            Tu administrador revisará el comprobante y acreditará los créditos.
           </p>
-        </div>
+        </form>
       )}
 
       <h2 className="section-label">Solicitar retiro</h2>
@@ -244,9 +322,39 @@ function CreditosPage() {
         )}
       </form>
 
+      {purchases.length > 0 && (
+        <>
+          <h2 className="section-label">Mis compras de créditos</h2>
+          <div className="space-y-2 mb-4">
+            {purchases.map((p) => {
+              const tag =
+                p.status === "approved" ? "tag-success" : p.status === "rejected" ? "tag-warning" : "tag-gold";
+              const label =
+                p.status === "approved" ? "✓ Acreditada" : p.status === "rejected" ? "✗ Rechazada" : "⏳ Pendiente";
+              return (
+                <div key={p.id} className="card-base !py-3 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-bold text-foreground truncate">
+                      {p.package_name} · {p.credits} cr{p.bonus > 0 ? ` + ${p.bonus} bonus` : ""}
+                    </div>
+                    <div className="text-[0.7rem] text-muted-foreground mt-0.5 truncate">
+                      {new Date(p.created_at).toLocaleDateString("es-AR")} · ${p.amount_ars.toLocaleString("es-AR")} ARS
+                    </div>
+                    {p.notes && (
+                      <div className="text-[0.7rem] text-muted-foreground italic mt-1 truncate">“{p.notes}”</div>
+                    )}
+                  </div>
+                  <span className={`tag ${tag} shrink-0`}>{label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
       {history.length > 0 && (
         <>
-          <h2 className="section-label">Mis solicitudes</h2>
+          <h2 className="section-label">Mis retiros</h2>
           <div className="space-y-2 mb-4">
             {history.map((w) => {
               const tag =
