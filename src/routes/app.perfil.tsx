@@ -73,7 +73,7 @@ function PerfilPage() {
   };
 
   const copyRef = async () => {
-    const url = `${window.location.origin}/register?ref=${refCode}`;
+    const url = `${window.location.origin}/ref/${refCode}`;
     try {
       await navigator.clipboard.writeText(url);
       toast.success("Link copiado al portapapeles");
@@ -198,7 +198,7 @@ function PerfilPage() {
       >
         <div className="text-xs text-muted-foreground">Compartí y ganá créditos retirables</div>
         <div className="font-display text-sm font-bold text-primary mt-1 truncate">
-          prodelite.com/ref/{refCode}
+          {typeof window !== "undefined" ? window.location.host : "prodelite.com"}/ref/{refCode}
         </div>
         <div className="text-[0.65rem] text-muted-foreground mt-1">Tocá para copiar</div>
       </button>

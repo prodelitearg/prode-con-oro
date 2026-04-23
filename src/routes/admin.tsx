@@ -143,7 +143,17 @@ function AdminPanel() {
         <div className="absolute left-1/2 -translate-x-1/2">
           <Logo size="sm" />
         </div>
-        <span className="tag tag-gold">Admin</span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => navigate({ to: "/app/partidos" })}
+            className="btn-mini"
+            aria-label="Ir a jugar"
+          >
+            🎮 Jugar
+          </button>
+          <span className="tag tag-gold">Admin</span>
+        </div>
       </header>
 
       <div className="app-wrap">
@@ -178,7 +188,7 @@ function DashTab({ data, refCode }: { data: AdminData; refCode: string | null })
 
   const copyRef = async () => {
     if (!refCode) return;
-    const url = `${window.location.origin}/register?ref=${refCode}`;
+    const url = `${window.location.origin}/ref/${refCode}`;
     try {
       await navigator.clipboard.writeText(url);
       toast.success("Link copiado");
@@ -213,7 +223,7 @@ function DashTab({ data, refCode }: { data: AdminData; refCode: string | null })
       >
         <div className="text-xs text-muted-foreground">Tu link de afiliación</div>
         <div className="font-display text-sm font-bold text-primary mt-1 truncate">
-          prodelite.com/register?ref={refCode ?? "—"}
+          {typeof window !== "undefined" ? window.location.host : "prodelite.com"}/ref/{refCode ?? "—"}
         </div>
         <div className="text-[0.65rem] text-muted-foreground mt-1">Tocá para copiar</div>
       </button>

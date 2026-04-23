@@ -17,6 +17,7 @@ import { Route as AppRouteImport } from './routes/app'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppIndexRouteImport } from './routes/app.index'
+import { Route as RefCodeRouteImport } from './routes/ref.$code'
 import { Route as AppTablaRouteImport } from './routes/app.tabla'
 import { Route as AppPerfilRouteImport } from './routes/app.perfil'
 import { Route as AppPartidosRouteImport } from './routes/app.partidos'
@@ -62,6 +63,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppRoute,
 } as any)
+const RefCodeRoute = RefCodeRouteImport.update({
+  id: '/ref/$code',
+  path: '/ref/$code',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppTablaRoute = AppTablaRouteImport.update({
   id: '/tabla',
   path: '/tabla',
@@ -95,6 +101,7 @@ export interface FileRoutesByFullPath {
   '/app/partidos': typeof AppPartidosRoute
   '/app/perfil': typeof AppPerfilRoute
   '/app/tabla': typeof AppTablaRoute
+  '/ref/$code': typeof RefCodeRoute
   '/app/': typeof AppIndexRoute
 }
 export interface FileRoutesByTo {
@@ -108,6 +115,7 @@ export interface FileRoutesByTo {
   '/app/partidos': typeof AppPartidosRoute
   '/app/perfil': typeof AppPerfilRoute
   '/app/tabla': typeof AppTablaRoute
+  '/ref/$code': typeof RefCodeRoute
   '/app': typeof AppIndexRoute
 }
 export interface FileRoutesById {
@@ -123,6 +131,7 @@ export interface FileRoutesById {
   '/app/partidos': typeof AppPartidosRoute
   '/app/perfil': typeof AppPerfilRoute
   '/app/tabla': typeof AppTablaRoute
+  '/ref/$code': typeof RefCodeRoute
   '/app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
@@ -139,6 +148,7 @@ export interface FileRouteTypes {
     | '/app/partidos'
     | '/app/perfil'
     | '/app/tabla'
+    | '/ref/$code'
     | '/app/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -152,6 +162,7 @@ export interface FileRouteTypes {
     | '/app/partidos'
     | '/app/perfil'
     | '/app/tabla'
+    | '/ref/$code'
     | '/app'
   id:
     | '__root__'
@@ -166,6 +177,7 @@ export interface FileRouteTypes {
     | '/app/partidos'
     | '/app/perfil'
     | '/app/tabla'
+    | '/ref/$code'
     | '/app/'
   fileRoutesById: FileRoutesById
 }
@@ -177,6 +189,7 @@ export interface RootRouteChildren {
   LoginAdminRoute: typeof LoginAdminRoute
   RegisterRoute: typeof RegisterRoute
   SuperadminRoute: typeof SuperadminRoute
+  RefCodeRoute: typeof RefCodeRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -237,6 +250,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/ref/$code': {
+      id: '/ref/$code'
+      path: '/ref/$code'
+      fullPath: '/ref/$code'
+      preLoaderRoute: typeof RefCodeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/app/tabla': {
       id: '/app/tabla'
       path: '/tabla'
@@ -294,6 +314,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginAdminRoute: LoginAdminRoute,
   RegisterRoute: RegisterRoute,
   SuperadminRoute: SuperadminRoute,
+  RefCodeRoute: RefCodeRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

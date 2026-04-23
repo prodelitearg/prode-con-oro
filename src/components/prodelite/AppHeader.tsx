@@ -3,15 +3,27 @@ import { Logo } from "./Logo";
 import { useAuth } from "@/contexts/AuthContext";
 
 export function AppHeader({ subtitle }: { subtitle?: string }) {
-  const { credits, profile } = useAuth();
+  const { credits, profile, hasRole } = useAuth();
   const total = (credits?.retirables ?? 0) + (credits?.bonus ?? 0);
   const firstName = profile?.nombre?.split(" ")[0] ?? "Jugador";
+  const isSuper = hasRole("superadmin");
+  const isAdmin = hasRole("admin");
 
   return (
     <header className="app-header">
-      <div className="font-display text-[0.7rem] font-bold tracking-[0.2em] text-muted-foreground uppercase">
-        {subtitle ?? "Liga"}
-      </div>
+      {isSuper || isAdmin ? (
+        <Link
+          to={isSuper ? "/superadmin" : "/admin"}
+          className="btn-mini no-underline"
+          aria-label="Ir a mi panel"
+        >
+          🛠 Mi panel
+        </Link>
+      ) : (
+        <div className="font-display text-[0.7rem] font-bold tracking-[0.2em] text-muted-foreground uppercase">
+          {subtitle ?? "Liga"}
+        </div>
+      )}
 
       <div className="absolute left-1/2 -translate-x-1/2">
         <Logo size="sm" />
