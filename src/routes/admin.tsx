@@ -143,7 +143,17 @@ function AdminPanel() {
         <div className="absolute left-1/2 -translate-x-1/2">
           <Logo size="sm" />
         </div>
-        <span className="tag tag-gold">Admin</span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => navigate({ to: "/app/partidos" })}
+            className="btn-mini"
+            aria-label="Ir a jugar"
+          >
+            🎮 Jugar
+          </button>
+          <span className="tag tag-gold">Admin</span>
+        </div>
       </header>
 
       <div className="app-wrap">
