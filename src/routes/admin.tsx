@@ -437,6 +437,201 @@ function RetirosTab({ adminId }: { adminId: string | undefined }) {
   );
 }
 
+interface PurchaseReq {
+  id: string;
+  user_id: string;
+  package_name: string;
+  credits: number;
+  bonus: number;
+  amount_ars: number;
+  receipt_url: string;
+  status: string;
+  notes: string | null;
+  created_at: string;
+  processed_at: string | null;
+  profile_name?: string;
+}
+
+function ComprasTab({ adminId }: { adminId: string | undefined }) {
+  const [items, setItems] = useState<PurchaseReq[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
+
+  const load = useCallback(async () => {
+    if (!adminId) return;
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("credit_purchase_requests" as never)
+      .select("id, user_id, package_name, credits, bonus, amount_ars, receipt_url, status, notes, created_at, processed_at")
+      .eq("admin_id", adminId)
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (error) {
+      console.error(error);
+      setItems([]);
+      setLoading(false);
+      return;
+    }
+    const rows = (data ?? []) as unknown as PurchaseReq[];
+    if (rows.length > 0) {
+      const ids = Array.from(new Set(rows.map((r) => r.user_id)));
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("user_id, nombre, apellido")
+        .in("user_id", ids);
+      const map = new Map((profs ?? []).map((p) => [p.user_id, `${p.nombre} ${p.apellido}`.trim()]));
+      setItems(rows.map((r) => ({ ...r, profile_name: map.get(r.user_id) ?? "Jugador" })));
+    } else {
+      setItems([]);
+    }
+    setLoading(false);
+  }, [adminId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const viewReceipt = async (req: PurchaseReq) => {
+    if (signedUrls[req.id]) {
+      window.open(signedUrls[req.id], "_blank", "noopener");
+      return;
+    }
+    const { data, error } = await supabase.storage
+      .from("credit-receipts")
+      .createSignedUrl(req.receipt_url, 300);
+    if (error || !data?.signedUrl) {
+      toast.error(error?.message ?? "No se pudo abrir el comprobante");
+      return;
+    }
+    setSignedUrls((s) => ({ ...s, [req.id]: data.signedUrl }));
+    window.open(data.signedUrl, "_blank", "noopener");
+  };
+
+  const resolve = async (id: string, approve: boolean) => {
+    let notes: string | null = null;
+    if (!approve) {
+      const txt = window.prompt("Motivo del rechazo (opcional):") ?? "";
+      notes = txt.trim() || null;
+    } else if (!window.confirm("¿Confirmás que recibiste el pago y querés acreditar los créditos?")) {
+      return;
+    }
+    setBusyId(id);
+    const { error } = await supabase.rpc("resolve_credit_purchase" as never, {
+      _request_id: id,
+      _approve: approve,
+      _notes: notes,
+    } as never);
+    setBusyId(null);
+    if (error) {
+      toast.error(error.message ?? "No se pudo procesar");
+      return;
+    }
+    toast.success(approve ? "Compra acreditada" : "Compra rechazada");
+    await load();
+  };
+
+  const pending = items.filter((i) => i.status === "pending");
+  const resolved = items.filter((i) => i.status !== "pending");
+
+  return (
+    <>
+      <div className="section-label !mt-0">Pendientes ({pending.length})</div>
+      {loading && <div className="text-sm text-muted-foreground">Cargando…</div>}
+      {!loading && pending.length === 0 && (
+        <div className="card-base text-center !py-5 text-sm text-muted-foreground">
+          No hay compras pendientes.
+        </div>
+      )}
+      {pending.map((p) => (
+        <div key={p.id} className="card-base mb-2 !py-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-sm font-bold text-foreground truncate">{p.profile_name}</div>
+              <div className="text-[0.7rem] text-muted-foreground mt-0.5">
+                {new Date(p.created_at).toLocaleDateString("es-AR")} ·{" "}
+                {new Date(p.created_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                <strong className="text-foreground">{p.package_name}</strong> · {p.credits} cr ret.
+                {p.bonus > 0 && <> + <span className="text-warning">{p.bonus} bonus</span></>}
+              </div>
+            </div>
+            <div className="text-right shrink-0">
+              <div className="font-display text-lg font-extrabold text-primary">
+                ${p.amount_ars.toLocaleString("es-AR")}
+              </div>
+              <div className="text-[0.7rem] text-muted-foreground">ARS</div>
+            </div>
+          </div>
+          <div className="flex gap-2 mt-3">
+            <button
+              type="button"
+              className="btn-mini flex-1"
+              onClick={() => viewReceipt(p)}
+            >
+              📎 Ver comprobante
+            </button>
+          </div>
+          <div className="flex gap-2 mt-2">
+            <button
+              type="button"
+              className="btn-mini flex-1 !bg-success/15 !text-success"
+              disabled={busyId === p.id}
+              onClick={() => resolve(p.id, true)}
+            >
+              ✓ Aprobar
+            </button>
+            <button
+              type="button"
+              className="btn-mini flex-1 !bg-warning/15 !text-warning"
+              disabled={busyId === p.id}
+              onClick={() => resolve(p.id, false)}
+            >
+              ✗ Rechazar
+            </button>
+          </div>
+        </div>
+      ))}
+
+      <div className="section-label">Historial</div>
+      {!loading && resolved.length === 0 && (
+        <div className="card-base text-center !py-5 text-sm text-muted-foreground">
+          Sin compras resueltas.
+        </div>
+      )}
+      {resolved.map((p) => {
+        const tag = p.status === "approved" ? "tag-success" : "tag-warning";
+        const label = p.status === "approved" ? "✓ Acreditada" : "✗ Rechazada";
+        return (
+          <div key={p.id} className="card-base mb-2 !py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-sm font-bold text-foreground truncate">{p.profile_name}</div>
+                <div className="text-[0.7rem] text-muted-foreground mt-0.5 truncate">
+                  {p.processed_at
+                    ? new Date(p.processed_at).toLocaleDateString("es-AR")
+                    : new Date(p.created_at).toLocaleDateString("es-AR")}{" "}
+                  · {p.package_name}
+                </div>
+                {p.notes && (
+                  <div className="text-[0.7rem] text-muted-foreground italic mt-0.5 truncate">“{p.notes}”</div>
+                )}
+              </div>
+              <div className="text-right shrink-0">
+                <div className="font-display text-base font-extrabold text-foreground">
+                  ${p.amount_ars.toLocaleString("es-AR")}
+                </div>
+                <span className={`tag ${tag} mt-1 inline-block`}>{label}</span>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 function ComisionesTab({ data }: { data: AdminData }) {
   const total = data.commissions.reduce((s, c) => s + c.amount, 0);
 
