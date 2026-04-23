@@ -354,7 +354,7 @@ function CreditosPage() {
 
       {history.length > 0 && (
         <>
-          <h2 className="section-label">Mis solicitudes</h2>
+          <h2 className="section-label">Mis retiros</h2>
           <div className="space-y-2 mb-4">
             {history.map((w) => {
               const tag =
