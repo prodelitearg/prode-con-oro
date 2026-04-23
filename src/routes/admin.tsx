@@ -188,7 +188,7 @@ function DashTab({ data, refCode }: { data: AdminData; refCode: string | null })
 
   const copyRef = async () => {
     if (!refCode) return;
-    const url = `${window.location.origin}/register?ref=${refCode}`;
+    const url = `${window.location.origin}/ref/${refCode}`;
     try {
       await navigator.clipboard.writeText(url);
       toast.success("Link copiado");
@@ -223,7 +223,7 @@ function DashTab({ data, refCode }: { data: AdminData; refCode: string | null })
       >
         <div className="text-xs text-muted-foreground">Tu link de afiliación</div>
         <div className="font-display text-sm font-bold text-primary mt-1 truncate">
-          prodelite.com/register?ref={refCode ?? "—"}
+          {typeof window !== "undefined" ? window.location.host : "prodelite.com"}/ref/{refCode ?? "—"}
         </div>
         <div className="text-[0.65rem] text-muted-foreground mt-1">Tocá para copiar</div>
       </button>
