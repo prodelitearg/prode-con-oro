@@ -14,6 +14,57 @@ export type Database = {
   }
   public: {
     Tables: {
+      credit_purchase_requests: {
+        Row: {
+          admin_id: string | null
+          amount_ars: number
+          bonus: number
+          created_at: string
+          credits: number
+          id: string
+          notes: string | null
+          package_id: string
+          package_name: string
+          processed_at: string | null
+          processed_by: string | null
+          receipt_url: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          admin_id?: string | null
+          amount_ars: number
+          bonus?: number
+          created_at?: string
+          credits: number
+          id?: string
+          notes?: string | null
+          package_id: string
+          package_name: string
+          processed_at?: string | null
+          processed_by?: string | null
+          receipt_url: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          admin_id?: string | null
+          amount_ars?: number
+          bonus?: number
+          created_at?: string
+          credits?: number
+          id?: string
+          notes?: string | null
+          package_id?: string
+          package_name?: string
+          processed_at?: string | null
+          processed_by?: string | null
+          receipt_url?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       matchday_commissions: {
         Row: {
           amount: number
@@ -427,8 +478,23 @@ export type Database = {
         }
         Returns: boolean
       }
+      request_credit_purchase: {
+        Args: {
+          _amount_ars: number
+          _bonus: number
+          _credits: number
+          _package_id: string
+          _package_name: string
+          _receipt_url: string
+        }
+        Returns: Json
+      }
       request_withdrawal: {
         Args: { _alias: string; _amount: number }
+        Returns: Json
+      }
+      resolve_credit_purchase: {
+        Args: { _approve: boolean; _notes?: string; _request_id: string }
         Returns: Json
       }
       resolve_withdrawal: {
