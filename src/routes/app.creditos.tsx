@@ -322,6 +322,36 @@ function CreditosPage() {
         )}
       </form>
 
+      {purchases.length > 0 && (
+        <>
+          <h2 className="section-label">Mis compras de créditos</h2>
+          <div className="space-y-2 mb-4">
+            {purchases.map((p) => {
+              const tag =
+                p.status === "approved" ? "tag-success" : p.status === "rejected" ? "tag-warning" : "tag-gold";
+              const label =
+                p.status === "approved" ? "✓ Acreditada" : p.status === "rejected" ? "✗ Rechazada" : "⏳ Pendiente";
+              return (
+                <div key={p.id} className="card-base !py-3 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-bold text-foreground truncate">
+                      {p.package_name} · {p.credits} cr{p.bonus > 0 ? ` + ${p.bonus} bonus` : ""}
+                    </div>
+                    <div className="text-[0.7rem] text-muted-foreground mt-0.5 truncate">
+                      {new Date(p.created_at).toLocaleDateString("es-AR")} · ${p.amount_ars.toLocaleString("es-AR")} ARS
+                    </div>
+                    {p.notes && (
+                      <div className="text-[0.7rem] text-muted-foreground italic mt-1 truncate">“{p.notes}”</div>
+                    )}
+                  </div>
+                  <span className={`tag ${tag} shrink-0`}>{label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
       {history.length > 0 && (
         <>
           <h2 className="section-label">Mis solicitudes</h2>
