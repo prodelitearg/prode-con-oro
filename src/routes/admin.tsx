@@ -27,12 +27,13 @@ export const Route = createFileRoute("/admin")({
   component: AdminPanel,
 });
 
-const TABS = ["dashboard", "afiliados", "retiros", "comisiones"] as const;
+const TABS = ["dashboard", "afiliados", "compras", "retiros", "comisiones"] as const;
 type Tab = (typeof TABS)[number];
 
 const TAB_LABEL: Record<Tab, string> = {
   dashboard: "Panel",
   afiliados: "Afiliados",
+  compras: "Compras",
   retiros: "Retiros",
   comisiones: "Comisiones",
 };
@@ -160,6 +161,7 @@ function AdminPanel() {
 
         {tab === "dashboard" && <DashTab data={data} refCode={profile?.ref_code ?? null} />}
         {tab === "afiliados" && <AfiliadosTab data={data} />}
+        {tab === "compras" && <ComprasTab adminId={user?.id} />}
         {tab === "retiros" && <RetirosTab adminId={user?.id} />}
         {tab === "comisiones" && <ComisionesTab data={data} />}
       </div>
