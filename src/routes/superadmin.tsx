@@ -965,38 +965,326 @@ function Usuarios() {
   );
 }
 
+interface FinPurchase {
+  id: string;
+  created_at: string;
+  user_id: string;
+  admin_id: string | null;
+  package_id: string;
+  package_name: string;
+  credits: number;
+  bonus: number;
+  amount_ars: number;
+  status: string;
+}
+interface FinPayout {
+  id: string;
+  created_at: string;
+  matchday_id: string;
+  user_id: string;
+  ranking_prize: number;
+  base_prize: number;
+}
+interface FinMatchday {
+  id: string;
+  number: number;
+  closed_at: string | null;
+  tournament_id: string;
+}
+interface FinTournament { id: string; name: string }
+
+const ARS_PER_CREDIT = 50; // 5000 ARS = 100 cr ⇒ 50 ARS/cr (paquete Starter)
+
+function fmtARS(n: number) {
+  return "$" + Math.round(n).toLocaleString("es-AR");
+}
+
 function Finanzas() {
+  const [loading, setLoading] = useState(true);
+  const [purchases, setPurchases] = useState<FinPurchase[]>([]);
+  const [payouts, setPayouts] = useState<FinPayout[]>([]);
+  const [matchdays, setMatchdays] = useState<FinMatchday[]>([]);
+  const [tournaments, setTournaments] = useState<FinTournament[]>([]);
+  const [profilesMap, setProfilesMap] = useState<Record<string, { nombre: string; apellido: string; email: string | null }>>({});
+  const [activeUsers, setActiveUsers] = useState(0);
+  const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "approved" | "rejected">("all");
+  const [filterAdmin, setFilterAdmin] = useState<string>("all");
+  const [filterFrom, setFilterFrom] = useState<string>("");
+  const [filterTo, setFilterTo] = useState<string>("");
+
+  useEffect(() => {
+    void (async () => {
+      setLoading(true);
+      const [
+        { data: pur },
+        { data: pay },
+        { data: md },
+        { data: tr },
+        { data: cr },
+      ] = await Promise.all([
+        supabase
+          .from("credit_purchase_requests" as never)
+          .select("id, created_at, user_id, admin_id, package_id, package_name, credits, bonus, amount_ars, status")
+          .order("created_at", { ascending: false })
+          .limit(500),
+        supabase
+          .from("matchday_payouts" as never)
+          .select("id, created_at, matchday_id, user_id, ranking_prize, base_prize")
+          .order("created_at", { ascending: false })
+          .limit(500),
+        supabase.from("matchdays").select("id, number, closed_at, tournament_id"),
+        supabase.from("tournaments").select("id, name"),
+        supabase.from("user_credits").select("user_id, retirables, bonus"),
+      ]);
+
+      const purchasesRows = (pur ?? []) as unknown as FinPurchase[];
+      const payoutsRows = (pay ?? []) as unknown as FinPayout[];
+      setPurchases(purchasesRows);
+      setPayouts(payoutsRows);
+      setMatchdays((md ?? []) as FinMatchday[]);
+      setTournaments((tr ?? []) as FinTournament[]);
+      setActiveUsers(((cr ?? []) as { retirables: number; bonus: number }[]).filter((u) => u.retirables > 0 || u.bonus > 0).length);
+
+      const ids = Array.from(new Set([
+        ...purchasesRows.map((p) => p.user_id),
+        ...purchasesRows.map((p) => p.admin_id).filter((x): x is string => !!x),
+      ]));
+      if (ids.length) {
+        const { data: profs } = await supabase.from("profiles").select("user_id,nombre,apellido,email").in("user_id", ids);
+        const m: Record<string, { nombre: string; apellido: string; email: string | null }> = {};
+        for (const p of (profs ?? []) as { user_id: string; nombre: string; apellido: string; email: string | null }[]) {
+          m[p.user_id] = { nombre: p.nombre, apellido: p.apellido, email: p.email };
+        }
+        setProfilesMap(m);
+      } else setProfilesMap({});
+      setLoading(false);
+    })();
+  }, []);
+
+  const approved = purchases.filter((p) => p.status === "approved");
+  const totalRecaudado = approved.reduce((s, p) => s + p.amount_ars, 0);
+  const cantidadVendidos = approved.length;
+
+  const packagesAgg: Record<string, { name: string; count: number; ars: number; credits: number }> = {};
+  for (const p of approved) {
+    const key = p.package_id || p.package_name;
+    if (!packagesAgg[key]) packagesAgg[key] = { name: p.package_name, count: 0, ars: 0, credits: p.credits };
+    packagesAgg[key].count += 1;
+    packagesAgg[key].ars += p.amount_ars;
+  }
+  const ranking = Object.entries(packagesAgg)
+    .map(([id, v]) => ({ id, ...v }))
+    .sort((a, b) => b.count - a.count);
+  const topPackage = ranking[0];
+
+  const superARS = totalRecaudado * 0.30;
+  const adminARS = totalRecaudado * 0.10;
+  const fondoARS = totalRecaudado * 0.60;
+  const baseARS = totalRecaudado * 0.10;
+  const pozosARS = totalRecaudado * 0.50;
+
+  // Filtros tabla compras
+  const adminOptions = Array.from(new Set(purchases.map((p) => p.admin_id).filter((x): x is string => !!x)));
+  const filteredPurchases = purchases.filter((p) => {
+    if (filterStatus !== "all" && p.status !== filterStatus) return false;
+    if (filterAdmin !== "all" && p.admin_id !== filterAdmin) return false;
+    if (filterFrom && new Date(p.created_at) < new Date(filterFrom)) return false;
+    if (filterTo && new Date(p.created_at) > new Date(filterTo + "T23:59:59")) return false;
+    return true;
+  });
+
+  const mdMap = new Map(matchdays.map((m) => [m.id, m]));
+  const trMap = new Map(tournaments.map((t) => [t.id, t.name]));
+
+  const payoutsByMatchday: Record<string, { matchday: FinMatchday; users: Set<string>; total: number }> = {};
+  for (const py of payouts) {
+    const md = mdMap.get(py.matchday_id);
+    if (!md) continue;
+    if (!payoutsByMatchday[py.matchday_id]) payoutsByMatchday[py.matchday_id] = { matchday: md, users: new Set(), total: 0 };
+    payoutsByMatchday[py.matchday_id].users.add(py.user_id);
+    payoutsByMatchday[py.matchday_id].total += (py.ranking_prize ?? 0) + (py.base_prize ?? 0);
+  }
+  const premiosRows = Object.values(payoutsByMatchday).sort((a, b) => {
+    const ad = a.matchday.closed_at ?? "";
+    const bd = b.matchday.closed_at ?? "";
+    return bd.localeCompare(ad);
+  });
+
+  const profileLabel = (uid: string | null) => {
+    if (!uid) return "—";
+    const p = profilesMap[uid];
+    if (!p) return "—";
+    const n = `${p.nombre} ${p.apellido}`.trim();
+    return n || (p.email ?? "Jugador");
+  };
+
+  if (loading) return <div className="text-sm text-muted-foreground">Cargando finanzas…</div>;
+
   return (
     <>
-      <div className="section-label !mt-0">Resumen financiero del mes</div>
+      {/* RESUMEN GENERAL */}
+      <div className="section-label !mt-0">Resumen general</div>
       <div className="grid grid-cols-2 gap-2.5 mb-5">
-        {[
-          { v: "$1.23M", l: "Recaudado", c: "var(--primary)" },
-          { v: "$735k", l: "Premiado", c: "var(--success)" },
-          { v: "$369k", l: "Tu ganancia", c: "var(--primary)" },
-          { v: "$122k", l: "Comisiones adm.", c: "var(--muted-foreground)" },
-        ].map((s) => (
-          <div key={s.l} className="card-base text-center !p-3">
-            <div className="font-display text-xl font-extrabold" style={{ color: s.c }}>{s.v}</div>
-            <div className="text-[0.6rem] tracking-[0.15em] text-muted-foreground uppercase mt-1">{s.l}</div>
-          </div>
-        ))}
-      </div>
-      <div className="section-label">Retiros pendientes</div>
-      {[
-        { n: "Claudia López", admin: "Carlos M.", cr: 1250, ars: "$62.500" },
-        { n: "Marcos Rodríguez", admin: "Lucía T.", cr: 800, ars: "$40.000" },
-      ].map((r, i) => (
-        <div key={i} className="card-base flex justify-between items-center mb-2 !py-3">
-          <div>
-            <div className="text-sm font-bold text-foreground">{r.n}</div>
-            <div className="text-[0.7rem] text-muted-foreground mt-0.5">
-              Admin: {r.admin} · {r.cr} cr retirables
-            </div>
-          </div>
-          <div className="font-display text-base font-extrabold text-primary">{r.ars}</div>
+        <div className="card-base text-center !p-3">
+          <div className="font-display text-xl font-extrabold text-primary">{cantidadVendidos > 0 ? fmtARS(totalRecaudado) : "0"}</div>
+          <div className="text-[0.6rem] tracking-[0.15em] text-muted-foreground uppercase mt-1">Total recaudado</div>
         </div>
-      ))}
+        <div className="card-base text-center !p-3">
+          <div className="font-display text-xl font-extrabold text-primary">{cantidadVendidos}</div>
+          <div className="text-[0.6rem] tracking-[0.15em] text-muted-foreground uppercase mt-1">Paquetes vendidos</div>
+        </div>
+        <div className="card-base text-center !p-3">
+          <div className="font-display text-base font-extrabold text-foreground truncate">{topPackage ? topPackage.name : "Sin datos aún"}</div>
+          <div className="text-[0.6rem] tracking-[0.15em] text-muted-foreground uppercase mt-1">Paquete más vendido</div>
+        </div>
+        <div className="card-base text-center !p-3">
+          <div className="font-display text-xl font-extrabold text-success">{activeUsers}</div>
+          <div className="text-[0.6rem] tracking-[0.15em] text-muted-foreground uppercase mt-1">Usuarios c/ créditos</div>
+        </div>
+      </div>
+
+      {/* DISTRIBUCIÓN */}
+      <div className="section-label">Distribución de ingresos</div>
+      <div className="card-base mb-4">
+        {totalRecaudado === 0 ? (
+          <div className="text-sm text-muted-foreground text-center py-2">Sin datos aún</div>
+        ) : (
+          <>
+            <DistRow label="30% Superadmin" value={fmtARS(superARS)} color="var(--primary)" />
+            <DistRow label="10% Admins afiliadores" value={fmtARS(adminARS)} color="var(--warning)" />
+            <DistRow label="60% Fondo de premios" value={fmtARS(fondoARS)} color="var(--success)" bold />
+            <div className="pl-3 mt-1 border-l-2 border-success/30">
+              <DistRow label="↳ 10% premios base (acierto inmediato)" value={fmtARS(baseARS)} color="var(--muted-foreground)" small />
+              <DistRow label="↳ 50% pozos por fecha" value={fmtARS(pozosARS)} color="var(--muted-foreground)" small last />
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* TABLA DE COMPRAS */}
+      <div className="section-label">Compras ({filteredPurchases.length})</div>
+      <div className="card-base mb-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <select className="field-input !py-1.5" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as typeof filterStatus)}>
+          <option value="all">Todos los estados</option>
+          <option value="pending">Pendiente</option>
+          <option value="approved">Aprobada</option>
+          <option value="rejected">Rechazada</option>
+        </select>
+        <select className="field-input !py-1.5" value={filterAdmin} onChange={(e) => setFilterAdmin(e.target.value)}>
+          <option value="all">Todos los admins</option>
+          {adminOptions.map((id) => (
+            <option key={id} value={id}>{profileLabel(id)}</option>
+          ))}
+        </select>
+        <input className="field-input !py-1.5" type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} />
+        <input className="field-input !py-1.5" type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} />
+      </div>
+      {filteredPurchases.length === 0 ? (
+        <div className="card-base text-center !py-5 text-sm text-muted-foreground">Sin datos aún</div>
+      ) : (
+        <div className="card-base !p-0 overflow-x-auto mb-5">
+          <table className="w-full text-[0.72rem]">
+            <thead className="text-muted-foreground uppercase text-[0.6rem] tracking-wider">
+              <tr className="border-b border-border/40">
+                <th className="text-left p-2">Fecha</th>
+                <th className="text-left p-2">Usuario</th>
+                <th className="text-left p-2">Admin</th>
+                <th className="text-left p-2">Paquete</th>
+                <th className="text-right p-2">Monto</th>
+                <th className="text-center p-2">Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredPurchases.map((p) => (
+                <tr key={p.id} className="border-b border-border/20">
+                  <td className="p-2 whitespace-nowrap">{new Date(p.created_at).toLocaleDateString("es-AR")}</td>
+                  <td className="p-2 truncate max-w-[120px]">{profileLabel(p.user_id)}</td>
+                  <td className="p-2 truncate max-w-[120px]">{p.admin_id ? profileLabel(p.admin_id) : "—"}</td>
+                  <td className="p-2">{p.package_name}</td>
+                  <td className="p-2 text-right font-bold text-primary whitespace-nowrap">{fmtARS(p.amount_ars)}</td>
+                  <td className="p-2 text-center">
+                    <span className={`tag ${p.status === "approved" ? "tag-success" : p.status === "rejected" ? "tag-warning" : "tag-gold"}`}>
+                      {p.status === "approved" ? "✓" : p.status === "rejected" ? "✗" : "…"}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* TABLA DE PREMIOS PAGADOS */}
+      <div className="section-label">Premios pagados</div>
+      {premiosRows.length === 0 ? (
+        <div className="card-base text-center !py-5 text-sm text-muted-foreground mb-5">Sin datos aún</div>
+      ) : (
+        <div className="card-base !p-0 overflow-x-auto mb-5">
+          <table className="w-full text-[0.72rem]">
+            <thead className="text-muted-foreground uppercase text-[0.6rem] tracking-wider">
+              <tr className="border-b border-border/40">
+                <th className="text-left p-2">Cerrada</th>
+                <th className="text-left p-2">Liga</th>
+                <th className="text-center p-2">Fecha N°</th>
+                <th className="text-right p-2">Premiados</th>
+                <th className="text-right p-2">Cr. distribuidos</th>
+                <th className="text-right p-2">Equivalente ARS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {premiosRows.map((row) => (
+                <tr key={row.matchday.id} className="border-b border-border/20">
+                  <td className="p-2 whitespace-nowrap">{row.matchday.closed_at ? new Date(row.matchday.closed_at).toLocaleDateString("es-AR") : "—"}</td>
+                  <td className="p-2 truncate max-w-[120px]">{trMap.get(row.matchday.tournament_id) ?? "—"}</td>
+                  <td className="p-2 text-center">{row.matchday.number}</td>
+                  <td className="p-2 text-right">{row.users.size}</td>
+                  <td className="p-2 text-right font-bold text-success">{row.total}</td>
+                  <td className="p-2 text-right text-muted-foreground">{fmtARS(row.total * ARS_PER_CREDIT)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* PAQUETES MÁS VENDIDOS */}
+      <div className="section-label">Paquetes más vendidos</div>
+      {ranking.length === 0 ? (
+        <div className="card-base text-center !py-5 text-sm text-muted-foreground">Sin datos aún</div>
+      ) : (
+        <div className="card-base !p-0 overflow-hidden">
+          {ranking.map((r, i) => {
+            const max = ranking[0].count;
+            const pct = Math.round((r.count / max) * 100);
+            return (
+              <div key={r.id} className="px-3 py-2.5 border-b border-border/20 last:border-0">
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-display text-base font-extrabold text-primary">{i + 1}°</span>
+                    <span className="text-sm font-bold text-foreground truncate">{r.name}</span>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="text-[0.7rem] text-muted-foreground">{r.count} {r.count === 1 ? "vez" : "veces"}</div>
+                    <div className="font-display text-sm font-extrabold text-primary">{fmtARS(r.ars)}</div>
+                  </div>
+                </div>
+                <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                  <div className="h-full bg-primary" style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </>
+  );
+}
+
+function DistRow({ label, value, color, bold, small, last }: { label: string; value: string; color: string; bold?: boolean; small?: boolean; last?: boolean }) {
+  return (
+    <div className={`flex justify-between items-center py-2 ${last ? "" : "border-b border-border/30"}`}>
+      <span className={`${small ? "text-[0.7rem]" : "text-sm"} text-muted-foreground`}>{label}</span>
+      <span className={`font-display ${bold ? "text-base font-extrabold" : small ? "text-xs font-bold" : "text-sm font-bold"}`} style={{ color }}>{value}</span>
+    </div>
   );
 }
