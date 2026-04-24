@@ -28,7 +28,7 @@ export const Route = createFileRoute("/superadmin")({
   component: SuperPanel,
 });
 
-const TABS = ["dashboard", "sync", "admins", "torneos", "usuarios", "finanzas"] as const;
+const TABS = ["dashboard", "sync", "admins", "torneos", "usuarios", "compras", "finanzas"] as const;
 type Tab = (typeof TABS)[number];
 const LABEL: Record<Tab, string> = {
   dashboard: "Panel",
@@ -36,13 +36,25 @@ const LABEL: Record<Tab, string> = {
   admins: "Admins",
   torneos: "Torneos",
   usuarios: "Usuarios",
+  compras: "Compras",
   finanzas: "Finanzas",
 };
 
 function SuperPanel() {
   const [tab, setTab] = useState<Tab>("dashboard");
+  const [pendingPurchases, setPendingPurchases] = useState(0);
   const navigate = useNavigate();
   const { signOut } = useAuth();
+
+  const loadPendingPurchases = async () => {
+    const { count } = await supabase
+      .from("credit_purchase_requests" as never)
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending");
+    setPendingPurchases(count ?? 0);
+  };
+
+  useEffect(() => { void loadPendingPurchases(); }, []);
 
   const handleLogout = async () => {
     await signOut();
@@ -60,6 +72,9 @@ function SuperPanel() {
           <Logo size="sm" />
         </div>
         <div className="flex items-center gap-2">
+          <button type="button" className="btn-mini bell-pill" onClick={() => setTab("compras")} aria-label="Ver compras pendientes">
+            🔔{pendingPurchases > 0 && <span>{pendingPurchases}</span>}
+          </button>
           <button
             type="button"
             onClick={() => navigate({ to: "/app/partidos" })}
@@ -86,6 +101,7 @@ function SuperPanel() {
         {tab === "admins" && <Admins />}
         {tab === "torneos" && <Torneos />}
         {tab === "usuarios" && <Usuarios />}
+        {tab === "compras" && <ComprasSuper onChanged={loadPendingPurchases} />}
         {tab === "finanzas" && <Finanzas />}
       </div>
     </>
@@ -414,6 +430,8 @@ function Torneos() {
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [matchdays, setMatchdays] = useState<Matchday[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
+  const [resultDrafts, setResultDrafts] = useState<Record<string, { h: string; a: string }>>({});
+  const [resultBusy, setResultBusy] = useState<string | null>(null);
   const [selTour, setSelTour] = useState<string | null>(null);
   const [selMd, setSelMd] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -431,7 +449,9 @@ function Torneos() {
   const reloadMatches = async (mdId: string) => {
     const { data, error } = await supabase.from("matches").select("*").eq("matchday_id", mdId).order("kickoff");
     if (error) return toast.error(error.message);
-    setMatches((data ?? []) as Match[]);
+    const rows = (data ?? []) as Match[];
+    setMatches(rows);
+    setResultDrafts(Object.fromEntries(rows.map((m) => [m.id, { h: String(m.home_score ?? ""), a: String(m.away_score ?? "") }])));
   };
 
   useEffect(() => { void reloadTournaments().then(() => setLoading(false)); }, []);
@@ -537,11 +557,34 @@ function Torneos() {
     if (error) return toast.error(error.message);
     if (selMd) void reloadMatches(selMd);
   };
-  const setResult = async (m: Match, h: string, a: string) => {
-    const hs = h === "" ? null : Number(h); const as = a === "" ? null : Number(a);
-    const status = hs !== null && as !== null ? "finished" : "scheduled";
-    const { error } = await supabase.from("matches").update({ home_score: hs, away_score: as, status }).eq("id", m.id);
+  const selectedMatchday = matchdays.find((md) => md.id === selMd) ?? null;
+  const canCloseSelected = !!selectedMatchday && !selectedMatchday.closed_at && matches.length > 0 && matches.every((m) => m.status === "finished" && m.home_score !== null && m.away_score !== null);
+
+  const confirmResult = async (m: Match) => {
+    const draft = resultDrafts[m.id] ?? { h: "", a: "" };
+    if (draft.h === "" || draft.a === "") return toast.error("Ingresá ambos goles");
+    if (!confirm(`¿Confirmás el resultado ${m.home_team} ${draft.h} - ${draft.a} ${m.away_team}?`)) return;
+    setResultBusy(m.id);
+    const { data, error } = await supabase.rpc("confirm_match_result" as never, {
+      _match_id: m.id,
+      _home_score: Number(draft.h),
+      _away_score: Number(draft.a),
+    } as never);
+    setResultBusy(null);
     if (error) return toast.error(error.message);
+    const r = (data ?? {}) as { awarded?: number; players?: number };
+    toast.success(`Resultado confirmado · ${r.players ?? 0} jugadores · ${r.awarded ?? 0} créditos acreditados`);
+    if (selMd) void reloadMatches(selMd);
+  };
+
+  const editResult = async (m: Match) => {
+    if (!confirm(`¿Editar resultado de ${m.home_team} vs ${m.away_team}? Se revertirán los premios base de este partido.`)) return;
+    setResultBusy(m.id);
+    const { data, error } = await supabase.rpc("reopen_match_result" as never, { _match_id: m.id } as never);
+    setResultBusy(null);
+    if (error) return toast.error(error.message);
+    const r = (data ?? {}) as { reversed?: number };
+    toast.success(`Resultado reabierto · ${r.reversed ?? 0} créditos revertidos`);
     if (selMd) void reloadMatches(selMd);
   };
 
@@ -592,7 +635,7 @@ function Torneos() {
                   {new Date(md.starts_at).toLocaleString("es-AR")} · Entrada {md.entry_cost} cr · Pozo {md.prize_pool} cr
                 </div>
               </button>
-              {!md.closed_at && (
+              {!md.closed_at && matches.length > 0 && selMd === md.id && matches.every((m) => m.status === "finished" && m.home_score !== null && m.away_score !== null) && (
                 <button type="button" className="btn-mini" onClick={() => closeMatchday(md)}>Cerrar</button>
               )}
               <button type="button" className="btn-mini is-danger" onClick={() => deleteMatchday(md)}>Eliminar</button>
@@ -624,24 +667,31 @@ function Torneos() {
                 <button type="button" className="btn-mini is-danger" onClick={() => deleteMatch(m)}>×</button>
               </div>
               <div className="text-[0.7rem] text-muted-foreground mt-1 mb-2">
-                {new Date(m.kickoff).toLocaleString("es-AR")} · {m.status}
+                {new Date(m.kickoff).toLocaleString("es-AR")} · {m.status === "finished" ? <span className="text-success font-bold">Finalizado</span> : <span>Pendiente</span>}
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[0.7rem] text-muted-foreground">Resultado:</span>
-                <input
-                  className="field-input !w-14 text-center !py-1" type="number" min={0} max={99}
-                  defaultValue={m.home_score ?? ""}
-                  onBlur={(e) => setResult(m, e.target.value, String(m.away_score ?? ""))}
-                />
-                <span>-</span>
-                <input
-                  className="field-input !w-14 text-center !py-1" type="number" min={0} max={99}
-                  defaultValue={m.away_score ?? ""}
-                  onBlur={(e) => setResult(m, String(m.home_score ?? ""), e.target.value)}
-                />
+              <div className="flex flex-wrap items-center gap-2">
+                {m.status === "finished" ? (
+                  <>
+                    <span className="font-display text-lg font-extrabold text-success">{m.home_score} - {m.away_score}</span>
+                    {!selectedMatchday?.closed_at && <button type="button" className="btn-mini" disabled={resultBusy === m.id} onClick={() => editResult(m)}>Editar resultado</button>}
+                  </>
+                ) : (
+                  <>
+                    <span className="text-[0.7rem] text-muted-foreground">Resultado:</span>
+                    <input className="field-input !w-14 text-center !py-1" type="number" min={0} max={99} value={resultDrafts[m.id]?.h ?? ""} onChange={(e) => setResultDrafts((s) => ({ ...s, [m.id]: { ...(s[m.id] ?? { h: "", a: "" }), h: e.target.value.replace(/[^0-9]/g, "").slice(0, 2) } }))} />
+                    <span>-</span>
+                    <input className="field-input !w-14 text-center !py-1" type="number" min={0} max={99} value={resultDrafts[m.id]?.a ?? ""} onChange={(e) => setResultDrafts((s) => ({ ...s, [m.id]: { ...(s[m.id] ?? { h: "", a: "" }), a: e.target.value.replace(/[^0-9]/g, "").slice(0, 2) } }))} />
+                    <button type="button" className="btn-mini" disabled={resultBusy === m.id} onClick={() => confirmResult(m)}>Confirmar resultado</button>
+                  </>
+                )}
               </div>
             </div>
           ))}
+          {canCloseSelected && selectedMatchday && (
+            <button type="button" className="btn-gold is-success mt-3" onClick={() => closeMatchday(selectedMatchday)}>
+              Cerrar fecha y distribuir pozo
+            </button>
+          )}
         </>
       )}
     </>
@@ -657,6 +707,109 @@ interface UsuarioRow {
   provincia: string | null;
   localidad: string | null;
   created_at: string;
+}
+
+interface PurchaseReq {
+  id: string;
+  user_id: string;
+  package_name: string;
+  credits: number;
+  bonus: number;
+  amount_ars: number;
+  receipt_url: string;
+  status: string;
+  notes: string | null;
+  created_at: string;
+  processed_at: string | null;
+  profile_name?: string;
+}
+
+function ComprasSuper({ onChanged }: { onChanged?: () => Promise<void> }) {
+  const [items, setItems] = useState<PurchaseReq[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
+
+  const load = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("credit_purchase_requests" as never)
+      .select("id, user_id, package_name, credits, bonus, amount_ars, receipt_url, status, notes, created_at, processed_at")
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (error) {
+      toast.error(error.message);
+      setItems([]);
+      setLoading(false);
+      return;
+    }
+    const rows = (data ?? []) as unknown as PurchaseReq[];
+    if (rows.length) {
+      const ids = Array.from(new Set(rows.map((r) => r.user_id)));
+      const { data: profs } = await supabase.from("profiles").select("user_id,nombre,apellido,email").in("user_id", ids);
+      const map = new Map((profs ?? []).map((p) => [p.user_id, `${`${p.nombre} ${p.apellido}`.trim() || "Jugador"} · ${p.email ?? "sin email"}`]));
+      setItems(rows.map((r) => ({ ...r, profile_name: map.get(r.user_id) ?? "Jugador · sin email" })));
+    } else setItems([]);
+    setLoading(false);
+  };
+
+  useEffect(() => { void load(); }, []);
+
+  const viewReceipt = async (req: PurchaseReq) => {
+    if (signedUrls[req.id]) return window.open(signedUrls[req.id], "_blank", "noopener");
+    const { data, error } = await supabase.storage.from("credit-receipts").createSignedUrl(req.receipt_url, 300);
+    if (error || !data?.signedUrl) return toast.error(error?.message ?? "No se pudo abrir el comprobante");
+    setSignedUrls((s) => ({ ...s, [req.id]: data.signedUrl }));
+    window.open(data.signedUrl, "_blank", "noopener");
+  };
+
+  const resolve = async (id: string, approve: boolean) => {
+    let notes: string | null = null;
+    if (!approve) notes = (window.prompt("Motivo del rechazo (opcional):") ?? "").trim() || null;
+    else if (!window.confirm("¿Confirmás que recibiste el pago y querés acreditar los créditos?")) return;
+    setBusyId(id);
+    const { error } = await supabase.rpc("resolve_credit_purchase" as never, { _request_id: id, _approve: approve, _notes: notes } as never);
+    setBusyId(null);
+    if (error) return toast.error(error.message ?? "No se pudo procesar");
+    toast.success(approve ? "Compra acreditada" : "Compra rechazada");
+    await load();
+    await onChanged?.();
+  };
+
+  const pending = items.filter((i) => i.status === "pending");
+  const resolved = items.filter((i) => i.status !== "pending");
+
+  return (
+    <>
+      <div className="section-label !mt-0">Compras pendientes ({pending.length})</div>
+      {loading && <div className="text-sm text-muted-foreground">Cargando…</div>}
+      {!loading && pending.length === 0 && <div className="card-base text-center !py-5 text-sm text-muted-foreground">No hay compras pendientes.</div>}
+      {pending.map((p) => <PurchaseCard key={p.id} p={p} busyId={busyId} viewReceipt={viewReceipt} resolve={resolve} />)}
+      <div className="section-label">Historial</div>
+      {!loading && resolved.length === 0 && <div className="card-base text-center !py-5 text-sm text-muted-foreground">Sin compras resueltas.</div>}
+      {resolved.map((p) => <PurchaseCard key={p.id} p={p} busyId={busyId} viewReceipt={viewReceipt} resolve={resolve} readonly />)}
+    </>
+  );
+}
+
+function PurchaseCard({ p, busyId, viewReceipt, resolve, readonly }: { p: PurchaseReq; busyId: string | null; viewReceipt: (p: PurchaseReq) => void; resolve: (id: string, approve: boolean) => void; readonly?: boolean }) {
+  const label = p.status === "approved" ? "✓ Aprobada" : p.status === "rejected" ? "✗ Rechazada" : "Pendiente";
+  const tag = p.status === "approved" ? "tag-success" : p.status === "rejected" ? "tag-warning" : "tag-gold";
+  return (
+    <div className="card-base mb-2 !py-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-sm font-bold text-foreground truncate">{p.profile_name}</div>
+          <div className="text-[0.7rem] text-muted-foreground mt-0.5">{new Date(p.created_at).toLocaleDateString("es-AR")} · {new Date(p.created_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}</div>
+          <div className="text-xs text-muted-foreground mt-1"><strong className="text-foreground">{p.package_name}</strong> · {p.credits} cr ret.{p.bonus > 0 && <> + <span className="text-warning">{p.bonus} bonus</span></>}</div>
+          <span className={`tag ${tag} mt-2 inline-block`}>{label}</span>
+        </div>
+        <div className="text-right shrink-0"><div className="font-display text-lg font-extrabold text-primary">${p.amount_ars.toLocaleString("es-AR")}</div><div className="text-[0.7rem] text-muted-foreground">ARS</div></div>
+      </div>
+      <div className="flex gap-2 mt-3"><button type="button" className="btn-mini flex-1" onClick={() => viewReceipt(p)}>📎 Ver comprobante</button></div>
+      {!readonly && <div className="flex gap-2 mt-2"><button type="button" className="btn-mini flex-1 !bg-success/15 !text-success" disabled={busyId === p.id} onClick={() => resolve(p.id, true)}>✓ Aprobar</button><button type="button" className="btn-mini flex-1 !bg-warning/15 !text-warning" disabled={busyId === p.id} onClick={() => resolve(p.id, false)}>✗ Rechazar</button></div>}
+    </div>
+  );
 }
 
 function Usuarios() {

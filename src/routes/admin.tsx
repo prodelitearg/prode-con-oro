@@ -124,9 +124,24 @@ function useAdminData(userId: string | undefined): AdminData {
 
 function AdminPanel() {
   const [tab, setTab] = useState<Tab>("dashboard");
+  const [pendingPurchases, setPendingPurchases] = useState(0);
   const navigate = useNavigate();
   const { signOut, profile, user } = useAuth();
   const data = useAdminData(user?.id);
+
+  const loadPendingPurchases = useCallback(async () => {
+    if (!user?.id) return;
+    const { count } = await supabase
+      .from("credit_purchase_requests" as never)
+      .select("id", { count: "exact", head: true })
+      .eq("admin_id", user.id)
+      .eq("status", "pending");
+    setPendingPurchases(count ?? 0);
+  }, [user?.id]);
+
+  useEffect(() => {
+    void loadPendingPurchases();
+  }, [loadPendingPurchases]);
 
   const handleLogout = async () => {
     await signOut();
@@ -144,6 +159,9 @@ function AdminPanel() {
           <Logo size="sm" />
         </div>
         <div className="flex items-center gap-2">
+          <button type="button" className="btn-mini bell-pill" onClick={() => setTab("compras")} aria-label="Ver compras pendientes">
+            🔔{pendingPurchases > 0 && <span>{pendingPurchases}</span>}
+          </button>
           <button
             type="button"
             onClick={() => navigate({ to: "/app/partidos" })}
@@ -171,7 +189,7 @@ function AdminPanel() {
 
         {tab === "dashboard" && <DashTab data={data} refCode={profile?.ref_code ?? null} />}
         {tab === "afiliados" && <AfiliadosTab data={data} />}
-        {tab === "compras" && <ComprasTab adminId={user?.id} />}
+        {tab === "compras" && <ComprasTab adminId={user?.id} onChanged={loadPendingPurchases} />}
         {tab === "retiros" && <RetirosTab adminId={user?.id} />}
         {tab === "comisiones" && <ComisionesTab data={data} />}
       </div>
@@ -462,7 +480,7 @@ interface PurchaseReq {
   profile_name?: string;
 }
 
-function ComprasTab({ adminId }: { adminId: string | undefined }) {
+function ComprasTab({ adminId, onChanged }: { adminId: string | undefined; onChanged?: () => Promise<void> }) {
   const [items, setItems] = useState<PurchaseReq[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -488,10 +506,10 @@ function ComprasTab({ adminId }: { adminId: string | undefined }) {
       const ids = Array.from(new Set(rows.map((r) => r.user_id)));
       const { data: profs } = await supabase
         .from("profiles")
-        .select("user_id, nombre, apellido")
+        .select("user_id, nombre, apellido, email")
         .in("user_id", ids);
-      const map = new Map((profs ?? []).map((p) => [p.user_id, `${p.nombre} ${p.apellido}`.trim()]));
-      setItems(rows.map((r) => ({ ...r, profile_name: map.get(r.user_id) ?? "Jugador" })));
+      const map = new Map((profs ?? []).map((p) => [p.user_id, `${`${p.nombre} ${p.apellido}`.trim() || "Jugador"} · ${p.email ?? "sin email"}`]));
+      setItems(rows.map((r) => ({ ...r, profile_name: map.get(r.user_id) ?? "Jugador · sin email" })));
     } else {
       setItems([]);
     }
@@ -539,6 +557,7 @@ function ComprasTab({ adminId }: { adminId: string | undefined }) {
     }
     toast.success(approve ? "Compra acreditada" : "Compra rechazada");
     await load();
+    await onChanged?.();
   };
 
   const pending = items.filter((i) => i.status === "pending");

@@ -65,6 +65,33 @@ export type Database = {
         }
         Relationships: []
       }
+      match_prediction_payouts: {
+        Row: {
+          created_at: string
+          credits: number
+          id: string
+          match_id: string
+          prediction_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          credits?: number
+          id?: string
+          match_id: string
+          prediction_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          credits?: number
+          id?: string
+          match_id?: string
+          prediction_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       matchday_commissions: {
         Row: {
           amount: number
@@ -471,6 +498,10 @@ export type Database = {
         Returns: number
       }
       close_matchday: { Args: { _matchday_id: string }; Returns: Json }
+      confirm_match_result: {
+        Args: { _away_score: number; _home_score: number; _match_id: string }
+        Returns: Json
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -478,6 +509,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      reopen_match_result: { Args: { _match_id: string }; Returns: Json }
       request_credit_purchase: {
         Args: {
           _amount_ars: number

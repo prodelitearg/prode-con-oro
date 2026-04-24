@@ -338,6 +338,25 @@
     backdrop-filter: blur(12px);
   }
 
+  .bell-pill {
+    position: relative;
+    min-width: 2.35rem;
+    padding-inline: 0.55rem;
+  }
+  .bell-pill span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1rem;
+    height: 1rem;
+    margin-left: 0.25rem;
+    border-radius: 999px;
+    background: var(--destructive);
+    color: var(--destructive-foreground);
+    font-size: 0.62rem;
+    line-height: 1;
+  }
+
   /* Pill de créditos */
   .credits-pill {
     display: flex;
