@@ -124,9 +124,24 @@ function useAdminData(userId: string | undefined): AdminData {
 
 function AdminPanel() {
   const [tab, setTab] = useState<Tab>("dashboard");
+  const [pendingPurchases, setPendingPurchases] = useState(0);
   const navigate = useNavigate();
   const { signOut, profile, user } = useAuth();
   const data = useAdminData(user?.id);
+
+  const loadPendingPurchases = useCallback(async () => {
+    if (!user?.id) return;
+    const { count } = await supabase
+      .from("credit_purchase_requests" as never)
+      .select("id", { count: "exact", head: true })
+      .eq("admin_id", user.id)
+      .eq("status", "pending");
+    setPendingPurchases(count ?? 0);
+  }, [user?.id]);
+
+  useEffect(() => {
+    void loadPendingPurchases();
+  }, [loadPendingPurchases]);
 
   const handleLogout = async () => {
     await signOut();
@@ -144,6 +159,9 @@ function AdminPanel() {
           <Logo size="sm" />
         </div>
         <div className="flex items-center gap-2">
+          <button type="button" className="btn-mini bell-pill" onClick={() => setTab("compras")} aria-label="Ver compras pendientes">
+            🔔{pendingPurchases > 0 && <span>{pendingPurchases}</span>}
+          </button>
           <button
             type="button"
             onClick={() => navigate({ to: "/app/partidos" })}
@@ -171,7 +189,7 @@ function AdminPanel() {
 
         {tab === "dashboard" && <DashTab data={data} refCode={profile?.ref_code ?? null} />}
         {tab === "afiliados" && <AfiliadosTab data={data} />}
-        {tab === "compras" && <ComprasTab adminId={user?.id} />}
+        {tab === "compras" && <ComprasTab adminId={user?.id} onChanged={loadPendingPurchases} />}
         {tab === "retiros" && <RetirosTab adminId={user?.id} />}
         {tab === "comisiones" && <ComisionesTab data={data} />}
       </div>
