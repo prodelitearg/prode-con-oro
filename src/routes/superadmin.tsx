@@ -635,7 +635,7 @@ function Torneos() {
                   {new Date(md.starts_at).toLocaleString("es-AR")} · Entrada {md.entry_cost} cr · Pozo {md.prize_pool} cr
                 </div>
               </button>
-              {!md.closed_at && (
+              {!md.closed_at && matches.length > 0 && selMd === md.id && matches.every((m) => m.status === "finished" && m.home_score !== null && m.away_score !== null) && (
                 <button type="button" className="btn-mini" onClick={() => closeMatchday(md)}>Cerrar</button>
               )}
               <button type="button" className="btn-mini is-danger" onClick={() => deleteMatchday(md)}>Eliminar</button>
