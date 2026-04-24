@@ -28,7 +28,7 @@ export const Route = createFileRoute("/superadmin")({
   component: SuperPanel,
 });
 
-const TABS = ["dashboard", "sync", "admins", "torneos", "usuarios", "finanzas"] as const;
+const TABS = ["dashboard", "sync", "admins", "torneos", "usuarios", "compras", "finanzas"] as const;
 type Tab = (typeof TABS)[number];
 const LABEL: Record<Tab, string> = {
   dashboard: "Panel",
@@ -36,13 +36,25 @@ const LABEL: Record<Tab, string> = {
   admins: "Admins",
   torneos: "Torneos",
   usuarios: "Usuarios",
+  compras: "Compras",
   finanzas: "Finanzas",
 };
 
 function SuperPanel() {
   const [tab, setTab] = useState<Tab>("dashboard");
+  const [pendingPurchases, setPendingPurchases] = useState(0);
   const navigate = useNavigate();
   const { signOut } = useAuth();
+
+  const loadPendingPurchases = async () => {
+    const { count } = await supabase
+      .from("credit_purchase_requests" as never)
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending");
+    setPendingPurchases(count ?? 0);
+  };
+
+  useEffect(() => { void loadPendingPurchases(); }, []);
 
   const handleLogout = async () => {
     await signOut();
@@ -60,6 +72,9 @@ function SuperPanel() {
           <Logo size="sm" />
         </div>
         <div className="flex items-center gap-2">
+          <button type="button" className="btn-mini bell-pill" onClick={() => setTab("compras")} aria-label="Ver compras pendientes">
+            🔔{pendingPurchases > 0 && <span>{pendingPurchases}</span>}
+          </button>
           <button
             type="button"
             onClick={() => navigate({ to: "/app/partidos" })}
@@ -86,6 +101,7 @@ function SuperPanel() {
         {tab === "admins" && <Admins />}
         {tab === "torneos" && <Torneos />}
         {tab === "usuarios" && <Usuarios />}
+        {tab === "compras" && <ComprasSuper onChanged={loadPendingPurchases} />}
         {tab === "finanzas" && <Finanzas />}
       </div>
     </>
