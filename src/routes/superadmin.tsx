@@ -430,6 +430,8 @@ function Torneos() {
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [matchdays, setMatchdays] = useState<Matchday[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
+  const [resultDrafts, setResultDrafts] = useState<Record<string, { h: string; a: string }>>({});
+  const [resultBusy, setResultBusy] = useState<string | null>(null);
   const [selTour, setSelTour] = useState<string | null>(null);
   const [selMd, setSelMd] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -447,7 +449,9 @@ function Torneos() {
   const reloadMatches = async (mdId: string) => {
     const { data, error } = await supabase.from("matches").select("*").eq("matchday_id", mdId).order("kickoff");
     if (error) return toast.error(error.message);
-    setMatches((data ?? []) as Match[]);
+    const rows = (data ?? []) as Match[];
+    setMatches(rows);
+    setResultDrafts(Object.fromEntries(rows.map((m) => [m.id, { h: String(m.home_score ?? ""), a: String(m.away_score ?? "") }])));
   };
 
   useEffect(() => { void reloadTournaments().then(() => setLoading(false)); }, []);
