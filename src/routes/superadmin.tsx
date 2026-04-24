@@ -557,11 +557,34 @@ function Torneos() {
     if (error) return toast.error(error.message);
     if (selMd) void reloadMatches(selMd);
   };
-  const setResult = async (m: Match, h: string, a: string) => {
-    const hs = h === "" ? null : Number(h); const as = a === "" ? null : Number(a);
-    const status = hs !== null && as !== null ? "finished" : "scheduled";
-    const { error } = await supabase.from("matches").update({ home_score: hs, away_score: as, status }).eq("id", m.id);
+  const selectedMatchday = matchdays.find((md) => md.id === selMd) ?? null;
+  const canCloseSelected = !!selectedMatchday && !selectedMatchday.closed_at && matches.length > 0 && matches.every((m) => m.status === "finished" && m.home_score !== null && m.away_score !== null);
+
+  const confirmResult = async (m: Match) => {
+    const draft = resultDrafts[m.id] ?? { h: "", a: "" };
+    if (draft.h === "" || draft.a === "") return toast.error("Ingresá ambos goles");
+    if (!confirm(`¿Confirmás el resultado ${m.home_team} ${draft.h} - ${draft.a} ${m.away_team}?`)) return;
+    setResultBusy(m.id);
+    const { data, error } = await supabase.rpc("confirm_match_result" as never, {
+      _match_id: m.id,
+      _home_score: Number(draft.h),
+      _away_score: Number(draft.a),
+    } as never);
+    setResultBusy(null);
     if (error) return toast.error(error.message);
+    const r = (data ?? {}) as { awarded?: number; players?: number };
+    toast.success(`Resultado confirmado · ${r.players ?? 0} jugadores · ${r.awarded ?? 0} créditos acreditados`);
+    if (selMd) void reloadMatches(selMd);
+  };
+
+  const editResult = async (m: Match) => {
+    if (!confirm(`¿Editar resultado de ${m.home_team} vs ${m.away_team}? Se revertirán los premios base de este partido.`)) return;
+    setResultBusy(m.id);
+    const { data, error } = await supabase.rpc("reopen_match_result" as never, { _match_id: m.id } as never);
+    setResultBusy(null);
+    if (error) return toast.error(error.message);
+    const r = (data ?? {}) as { reversed?: number };
+    toast.success(`Resultado reabierto · ${r.reversed ?? 0} créditos revertidos`);
     if (selMd) void reloadMatches(selMd);
   };
 
