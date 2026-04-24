@@ -667,24 +667,31 @@ function Torneos() {
                 <button type="button" className="btn-mini is-danger" onClick={() => deleteMatch(m)}>×</button>
               </div>
               <div className="text-[0.7rem] text-muted-foreground mt-1 mb-2">
-                {new Date(m.kickoff).toLocaleString("es-AR")} · {m.status}
+                {new Date(m.kickoff).toLocaleString("es-AR")} · {m.status === "finished" ? <span className="text-success font-bold">Finalizado</span> : <span>Pendiente</span>}
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[0.7rem] text-muted-foreground">Resultado:</span>
-                <input
-                  className="field-input !w-14 text-center !py-1" type="number" min={0} max={99}
-                  defaultValue={m.home_score ?? ""}
-                  onBlur={(e) => setResult(m, e.target.value, String(m.away_score ?? ""))}
-                />
-                <span>-</span>
-                <input
-                  className="field-input !w-14 text-center !py-1" type="number" min={0} max={99}
-                  defaultValue={m.away_score ?? ""}
-                  onBlur={(e) => setResult(m, String(m.home_score ?? ""), e.target.value)}
-                />
+              <div className="flex flex-wrap items-center gap-2">
+                {m.status === "finished" ? (
+                  <>
+                    <span className="font-display text-lg font-extrabold text-success">{m.home_score} - {m.away_score}</span>
+                    {!selectedMatchday?.closed_at && <button type="button" className="btn-mini" disabled={resultBusy === m.id} onClick={() => editResult(m)}>Editar resultado</button>}
+                  </>
+                ) : (
+                  <>
+                    <span className="text-[0.7rem] text-muted-foreground">Resultado:</span>
+                    <input className="field-input !w-14 text-center !py-1" type="number" min={0} max={99} value={resultDrafts[m.id]?.h ?? ""} onChange={(e) => setResultDrafts((s) => ({ ...s, [m.id]: { ...(s[m.id] ?? { h: "", a: "" }), h: e.target.value.replace(/[^0-9]/g, "").slice(0, 2) } }))} />
+                    <span>-</span>
+                    <input className="field-input !w-14 text-center !py-1" type="number" min={0} max={99} value={resultDrafts[m.id]?.a ?? ""} onChange={(e) => setResultDrafts((s) => ({ ...s, [m.id]: { ...(s[m.id] ?? { h: "", a: "" }), a: e.target.value.replace(/[^0-9]/g, "").slice(0, 2) } }))} />
+                    <button type="button" className="btn-mini" disabled={resultBusy === m.id} onClick={() => confirmResult(m)}>Confirmar resultado</button>
+                  </>
+                )}
               </div>
             </div>
           ))}
+          {canCloseSelected && selectedMatchday && (
+            <button type="button" className="btn-gold is-success mt-3" onClick={() => closeMatchday(selectedMatchday)}>
+              Cerrar fecha y distribuir pozo
+            </button>
+          )}
         </>
       )}
     </>
