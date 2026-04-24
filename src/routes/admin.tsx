@@ -480,7 +480,7 @@ interface PurchaseReq {
   profile_name?: string;
 }
 
-function ComprasTab({ adminId }: { adminId: string | undefined }) {
+function ComprasTab({ adminId, onChanged }: { adminId: string | undefined; onChanged?: () => Promise<void> }) {
   const [items, setItems] = useState<PurchaseReq[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -506,10 +506,10 @@ function ComprasTab({ adminId }: { adminId: string | undefined }) {
       const ids = Array.from(new Set(rows.map((r) => r.user_id)));
       const { data: profs } = await supabase
         .from("profiles")
-        .select("user_id, nombre, apellido")
+        .select("user_id, nombre, apellido, email")
         .in("user_id", ids);
-      const map = new Map((profs ?? []).map((p) => [p.user_id, `${p.nombre} ${p.apellido}`.trim()]));
-      setItems(rows.map((r) => ({ ...r, profile_name: map.get(r.user_id) ?? "Jugador" })));
+      const map = new Map((profs ?? []).map((p) => [p.user_id, `${`${p.nombre} ${p.apellido}`.trim() || "Jugador"} · ${p.email ?? "sin email"}`]));
+      setItems(rows.map((r) => ({ ...r, profile_name: map.get(r.user_id) ?? "Jugador · sin email" })));
     } else {
       setItems([]);
     }
@@ -557,6 +557,7 @@ function ComprasTab({ adminId }: { adminId: string | undefined }) {
     }
     toast.success(approve ? "Compra acreditada" : "Compra rechazada");
     await load();
+    await onChanged?.();
   };
 
   const pending = items.filter((i) => i.status === "pending");
