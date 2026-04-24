@@ -868,8 +868,15 @@ function Usuarios() {
     setRoleBusy(u.user_id);
     try {
       await promoteUser({ data: { userId: u.user_id } });
-      setRoles((prev) => ({ ...prev, [u.user_id]: Array.from(new Set([...(prev[u.user_id] ?? []), "admin"])) }));
-      toast.success(`${displayName(u)} ahora es ADMIN`);
+      // Releer desde BD para confirmar que se persistió
+      const { data: rs } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", u.user_id);
+      const fresh = ((rs ?? []) as { role: string }[]).map((r) => r.role);
+      setRoles((prev) => ({ ...prev, [u.user_id]: fresh }));
+      if (fresh.includes("admin")) toast.success(`${displayName(u)} ahora es ADMIN`);
+      else toast.error("No se pudo confirmar el cambio en la base de datos");
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       toast.error(msg);
@@ -883,8 +890,14 @@ function Usuarios() {
     setRoleBusy(u.user_id);
     try {
       await revoke({ data: { userId: u.user_id } });
-      setRoles((prev) => ({ ...prev, [u.user_id]: (prev[u.user_id] ?? []).filter((role) => role !== "admin") }));
-      toast.success(`${displayName(u)} vuelve a usuario normal`);
+      const { data: rs } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", u.user_id);
+      const fresh = ((rs ?? []) as { role: string }[]).map((r) => r.role);
+      setRoles((prev) => ({ ...prev, [u.user_id]: fresh }));
+      if (!fresh.includes("admin")) toast.success(`${displayName(u)} vuelve a usuario normal`);
+      else toast.error("No se pudo confirmar el cambio en la base de datos");
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       toast.error(msg);
