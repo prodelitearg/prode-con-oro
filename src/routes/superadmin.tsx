@@ -28,7 +28,7 @@ export const Route = createFileRoute("/superadmin")({
   component: SuperPanel,
 });
 
-const TABS = ["dashboard", "sync", "admins", "torneos", "usuarios", "compras", "finanzas"] as const;
+const TABS = ["dashboard", "sync", "admins", "torneos", "usuarios", "compras", "publicidad", "finanzas"] as const;
 type Tab = (typeof TABS)[number];
 const LABEL: Record<Tab, string> = {
   dashboard: "Panel",
@@ -37,6 +37,7 @@ const LABEL: Record<Tab, string> = {
   torneos: "Torneos",
   usuarios: "Usuarios",
   compras: "Compras",
+  publicidad: "Publicidad",
   finanzas: "Finanzas",
 };
 
@@ -102,6 +103,7 @@ function SuperPanel() {
         {tab === "torneos" && <Torneos />}
         {tab === "usuarios" && <Usuarios />}
         {tab === "compras" && <ComprasSuper onChanged={loadPendingPurchases} />}
+        {tab === "publicidad" && <Publicidad />}
         {tab === "finanzas" && <Finanzas />}
       </div>
     </>
