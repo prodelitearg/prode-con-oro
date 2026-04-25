@@ -47,6 +47,42 @@ export type Database = {
         }
         Relationships: []
       }
+      credit_movements: {
+        Row: {
+          amount: number
+          bonus_delta: number
+          created_at: string
+          description: string
+          id: string
+          kind: string
+          matchday_id: string | null
+          retirables_delta: number
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          bonus_delta?: number
+          created_at?: string
+          description: string
+          id?: string
+          kind: string
+          matchday_id?: string | null
+          retirables_delta?: number
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          bonus_delta?: number
+          created_at?: string
+          description?: string
+          id?: string
+          kind?: string
+          matchday_id?: string | null
+          retirables_delta?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       credit_purchase_requests: {
         Row: {
           admin_id: string | null
@@ -159,6 +195,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      matchday_entries: {
+        Row: {
+          created_at: string
+          id: string
+          matchday_id: string
+          paid_bonus: number
+          paid_credits: number
+          paid_retirables: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          matchday_id: string
+          paid_bonus?: number
+          paid_credits?: number
+          paid_retirables?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          matchday_id?: string
+          paid_bonus?: number
+          paid_credits?: number
+          paid_retirables?: number
+          user_id?: string
+        }
+        Relationships: []
       }
       matchday_payouts: {
         Row: {
@@ -542,6 +608,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      pay_matchday_entry: { Args: { _matchday_id: string }; Returns: Json }
       reopen_match_result: { Args: { _match_id: string }; Returns: Json }
       request_credit_purchase: {
         Args: {

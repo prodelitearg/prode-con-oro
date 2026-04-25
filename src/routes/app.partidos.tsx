@@ -33,7 +33,7 @@ interface MatchdayRow {
 type MatchRow = MatchData & { matchday_id: string };
 
 function PartidosPage() {
-  const { user } = useAuth();
+  const { user, credits, refresh } = useAuth();
   const [tournaments, setTournaments] = useState<TournamentRow[]>([]);
   const [activeTournament, setActiveTournament] = useState<string>("");
   const [matchdays, setMatchdays] = useState<MatchdayRow[]>([]);
@@ -44,6 +44,8 @@ function PartidosPage() {
   const [loading, setLoading] = useState(true);
   const [savingState, setSavingState] = useState(false);
   const [leagueChosen, setLeagueChosen] = useState(false);
+  const [paidMatchdays, setPaidMatchdays] = useState<Set<string>>(new Set());
+  const [payingMd, setPayingMd] = useState(false);
 
   // Cargar torneos + matchdays una vez
   useEffect(() => {
@@ -110,12 +112,59 @@ function PartidosPage() {
     })();
   }, [activeMd, user]);
 
+  // Cargar entradas pagadas
+  useEffect(() => {
+    if (!user) return;
+    void (async () => {
+      const { data } = await supabase
+        .from("matchday_entries")
+        .select("matchday_id")
+        .eq("user_id", user.id);
+      setPaidMatchdays(new Set(((data ?? []) as { matchday_id: string }[]).map((r) => r.matchday_id)));
+    })();
+  }, [user]);
+
+  const isPaid = activeMd ? paidMatchdays.has(activeMd) : false;
+
+  const handlePayEntry = async () => {
+    if (!user || !activeMd || !activeMatchday) return;
+    const totalCr = (credits?.bonus ?? 0) + (credits?.retirables ?? 0);
+    if (totalCr < activeMatchday.entry_cost) {
+      toast.error("No tenés créditos suficientes. Comprá un paquete para participar.");
+      return;
+    }
+    setPayingMd(true);
+    const { data, error } = await supabase.rpc("pay_matchday_entry", { _matchday_id: activeMd });
+    setPayingMd(false);
+    if (error) {
+      if (error.message.includes("INSUFFICIENT_CREDITS")) {
+        toast.error("No tenés créditos suficientes. Comprá un paquete para participar.");
+      } else {
+        toast.error(error.message);
+      }
+      return;
+    }
+    const result = (data ?? {}) as { paid_credits?: number; already_paid?: boolean };
+    setPaidMatchdays((prev) => new Set(prev).add(activeMd));
+    await refresh();
+    if (result.already_paid) {
+      toast.success("Ya estabas inscripto en esta fecha");
+    } else {
+      toast.success(`Entrada pagada · -${result.paid_credits ?? activeMatchday.entry_cost} cr`);
+    }
+  };
+
   const handleScore = (matchId: string, side: "h" | "a", value: string) => {
     setScores((p) => ({ ...p, [matchId]: { ...(p[matchId] ?? { h: "", a: "" }), [side]: value } }));
   };
 
   const handleSave = async () => {
     if (!user) return;
+    if (!activeMd) return;
+    if (!isPaid) {
+      toast.error("Primero pagá la entrada de la fecha para guardar pronósticos.");
+      return;
+    }
     const rows = matches
       .filter((m) => scores[m.id]?.h !== "" && scores[m.id]?.a !== "")
       .map((m) => ({
@@ -136,7 +185,9 @@ function PartidosPage() {
       return;
     }
     setSaved(true);
-    toast.success(`${rows.length} pronóstico${rows.length === 1 ? "" : "s"} guardado${rows.length === 1 ? "" : "s"}`);
+    toast.success(
+      `¡Pronósticos guardados! ${rows.length === 1 ? "1 partido cargado." : `${rows.length} partidos cargados.`}`
+    );
     setTimeout(() => setSaved(false), 2200);
   };
 
@@ -233,9 +284,32 @@ function PartidosPage() {
               {activeTournamentName} · Premio 1°: {Math.round(activeMatchday.prize_pool * 0.2).toLocaleString("es-AR")} cr
             </div>
           </div>
-          <button type="button" className="btn-mini">
-            Entrar · {activeMatchday.entry_cost} cr
-          </button>
+          {isPaid ? (
+            <span className="tag tag-success">✓ Inscripto</span>
+          ) : (
+            <button
+              type="button"
+              className="btn-mini"
+              onClick={handlePayEntry}
+              disabled={payingMd}
+            >
+              {payingMd ? "Procesando…" : `Entrar · ${activeMatchday.entry_cost} cr`}
+            </button>
+          )}
+        </div>
+      )}
+
+      {leagueChosen && activeMatchday && !isPaid && matches.length > 0 && (
+        <div
+          className="card-base !py-3 mb-3 text-center matches-fade-in"
+          style={{ borderColor: "oklch(0.80 0.155 88 / 0.4)" }}
+        >
+          <div className="text-sm font-semibold text-foreground">
+            Pagá la entrada para cargar tus pronósticos
+          </div>
+          <div className="text-[0.7rem] text-muted-foreground mt-1">
+            Costo: {activeMatchday.entry_cost} cr · Saldo: {(credits?.bonus ?? 0) + (credits?.retirables ?? 0)} cr
+          </div>
         </div>
       )}
 
@@ -260,6 +334,7 @@ function PartidosPage() {
                 awayScore={scores[m.id]?.a ?? ""}
                 onChange={handleScore}
                 highlight={gi === 0 && i === 0}
+                disabled={!isPaid}
               />
             ))}
           </div>
@@ -267,7 +342,7 @@ function PartidosPage() {
       </div>
       )}
 
-      {leagueChosen && matches.length > 0 && (
+      {leagueChosen && matches.length > 0 && isPaid && (
         <button
           type="button"
           className={`save-fab ${saved ? "is-saved" : ""}`}

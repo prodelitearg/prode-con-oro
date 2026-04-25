@@ -21,6 +21,7 @@ import { Route as RefCodeRouteImport } from './routes/ref.$code'
 import { Route as AppTablaRouteImport } from './routes/app.tabla'
 import { Route as AppPerfilRouteImport } from './routes/app.perfil'
 import { Route as AppPartidosRouteImport } from './routes/app.partidos'
+import { Route as AppHistorialRouteImport } from './routes/app.historial'
 import { Route as AppCreditosRouteImport } from './routes/app.creditos'
 
 const SuperadminRoute = SuperadminRouteImport.update({
@@ -83,6 +84,11 @@ const AppPartidosRoute = AppPartidosRouteImport.update({
   path: '/partidos',
   getParentRoute: () => AppRoute,
 } as any)
+const AppHistorialRoute = AppHistorialRouteImport.update({
+  id: '/historial',
+  path: '/historial',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppCreditosRoute = AppCreditosRouteImport.update({
   id: '/creditos',
   path: '/creditos',
@@ -98,6 +104,7 @@ export interface FileRoutesByFullPath {
   '/register': typeof RegisterRoute
   '/superadmin': typeof SuperadminRoute
   '/app/creditos': typeof AppCreditosRoute
+  '/app/historial': typeof AppHistorialRoute
   '/app/partidos': typeof AppPartidosRoute
   '/app/perfil': typeof AppPerfilRoute
   '/app/tabla': typeof AppTablaRoute
@@ -112,6 +119,7 @@ export interface FileRoutesByTo {
   '/register': typeof RegisterRoute
   '/superadmin': typeof SuperadminRoute
   '/app/creditos': typeof AppCreditosRoute
+  '/app/historial': typeof AppHistorialRoute
   '/app/partidos': typeof AppPartidosRoute
   '/app/perfil': typeof AppPerfilRoute
   '/app/tabla': typeof AppTablaRoute
@@ -128,6 +136,7 @@ export interface FileRoutesById {
   '/register': typeof RegisterRoute
   '/superadmin': typeof SuperadminRoute
   '/app/creditos': typeof AppCreditosRoute
+  '/app/historial': typeof AppHistorialRoute
   '/app/partidos': typeof AppPartidosRoute
   '/app/perfil': typeof AppPerfilRoute
   '/app/tabla': typeof AppTablaRoute
@@ -145,6 +154,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/superadmin'
     | '/app/creditos'
+    | '/app/historial'
     | '/app/partidos'
     | '/app/perfil'
     | '/app/tabla'
@@ -159,6 +169,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/superadmin'
     | '/app/creditos'
+    | '/app/historial'
     | '/app/partidos'
     | '/app/perfil'
     | '/app/tabla'
@@ -174,6 +185,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/superadmin'
     | '/app/creditos'
+    | '/app/historial'
     | '/app/partidos'
     | '/app/perfil'
     | '/app/tabla'
@@ -278,6 +290,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPartidosRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/historial': {
+      id: '/app/historial'
+      path: '/historial'
+      fullPath: '/app/historial'
+      preLoaderRoute: typeof AppHistorialRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/creditos': {
       id: '/app/creditos'
       path: '/creditos'
@@ -290,6 +309,7 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteChildren {
   AppCreditosRoute: typeof AppCreditosRoute
+  AppHistorialRoute: typeof AppHistorialRoute
   AppPartidosRoute: typeof AppPartidosRoute
   AppPerfilRoute: typeof AppPerfilRoute
   AppTablaRoute: typeof AppTablaRoute
@@ -298,6 +318,7 @@ interface AppRouteChildren {
 
 const AppRouteChildren: AppRouteChildren = {
   AppCreditosRoute: AppCreditosRoute,
+  AppHistorialRoute: AppHistorialRoute,
   AppPartidosRoute: AppPartidosRoute,
   AppPerfilRoute: AppPerfilRoute,
   AppTablaRoute: AppTablaRoute,
