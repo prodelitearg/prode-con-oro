@@ -48,9 +48,10 @@ export const promoteToAdminFn = createServerFn({ method: "POST" })
       return { ok: true, alreadyAdmin: true, userId: profile.user_id, email: profile.email };
     }
 
-    const { error: insErr } = await supabaseAdmin
-      .from("user_roles")
-      .insert({ user_id: profile.user_id, role: "admin" });
+    const { error: insErr } = await context.supabase.rpc("set_user_role" as never, {
+      _user_id: profile.user_id,
+      _role: "admin",
+    } as never);
     if (insErr) throw new Error(insErr.message);
 
     return { ok: true, alreadyAdmin: false, userId: profile.user_id, email: profile.email };
@@ -62,11 +63,10 @@ export const revokeAdminFn = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { userId } = context;
     await assertSuperadmin(userId);
-    const { error } = await supabaseAdmin
-      .from("user_roles")
-      .delete()
-      .eq("user_id", data.userId)
-      .eq("role", "admin");
+    const { error } = await context.supabase.rpc("set_user_role" as never, {
+      _user_id: data.userId,
+      _role: "user",
+    } as never);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -90,9 +90,10 @@ export const promoteUserToAdminFn = createServerFn({ method: "POST" })
       return { ok: true, alreadyAdmin: true };
     }
 
-    const { error } = await supabaseAdmin
-      .from("user_roles")
-      .insert({ user_id: data.userId, role: "admin" });
+    const { error } = await context.supabase.rpc("set_user_role" as never, {
+      _user_id: data.userId,
+      _role: "admin",
+    } as never);
     if (error) throw new Error(error.message);
     return { ok: true, alreadyAdmin: false };
   });
