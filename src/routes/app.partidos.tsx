@@ -334,6 +334,7 @@ function PartidosPage() {
                 awayScore={scores[m.id]?.a ?? ""}
                 onChange={handleScore}
                 highlight={gi === 0 && i === 0}
+                disabled={!isPaid}
               />
             ))}
           </div>
