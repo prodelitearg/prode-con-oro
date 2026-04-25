@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 
 const items = [
   { to: "/app/partidos" as const, label: "Partidos", icon: "⚽" },
+  { to: "/app/historial" as const, label: "Historial", icon: "📊" },
   { to: "/app/tabla" as const, label: "Tabla", icon: "🏆" },
   { to: "/app/creditos" as const, label: "Créditos", icon: "💰" },
   { to: "/app/perfil" as const, label: "Perfil", icon: "👤" },
