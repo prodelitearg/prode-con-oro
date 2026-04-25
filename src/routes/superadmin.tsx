@@ -28,7 +28,7 @@ export const Route = createFileRoute("/superadmin")({
   component: SuperPanel,
 });
 
-const TABS = ["dashboard", "sync", "admins", "torneos", "usuarios", "compras", "finanzas"] as const;
+const TABS = ["dashboard", "sync", "admins", "torneos", "usuarios", "compras", "publicidad", "finanzas"] as const;
 type Tab = (typeof TABS)[number];
 const LABEL: Record<Tab, string> = {
   dashboard: "Panel",
@@ -37,6 +37,7 @@ const LABEL: Record<Tab, string> = {
   torneos: "Torneos",
   usuarios: "Usuarios",
   compras: "Compras",
+  publicidad: "Publicidad",
   finanzas: "Finanzas",
 };
 
@@ -102,6 +103,7 @@ function SuperPanel() {
         {tab === "torneos" && <Torneos />}
         {tab === "usuarios" && <Usuarios />}
         {tab === "compras" && <ComprasSuper onChanged={loadPendingPurchases} />}
+        {tab === "publicidad" && <Publicidad />}
         {tab === "finanzas" && <Finanzas />}
       </div>
     </>
@@ -1279,5 +1281,201 @@ function DistRow({ label, value, color, bold, small, last }: { label: string; va
       <span className={`${small ? "text-[0.7rem]" : "text-sm"} text-muted-foreground`}>{label}</span>
       <span className={`font-display ${bold ? "text-base font-extrabold" : small ? "text-xs font-bold" : "text-sm font-bold"}`} style={{ color }}>{value}</span>
     </div>
+  );
+}
+
+// ============================================================
+// Gestión de Publicidad — Banners
+// ============================================================
+interface AdsBanner {
+  id: string;
+  image_url: string;
+  link_url: string | null;
+  title: string | null;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+function Publicidad() {
+  const [banners, setBanners] = useState<AdsBanner[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [title, setTitle] = useState("");
+  const [link, setLink] = useState("");
+  const [order, setOrder] = useState("0");
+  const [file, setFile] = useState<File | null>(null);
+
+  const load = async () => {
+    const { data, error } = await supabase
+      .from("ads_banners" as never)
+      .select("id,image_url,link_url,title,sort_order,is_active,created_at")
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true });
+    if (error) toast.error("Error cargando banners: " + error.message);
+    setBanners(((data ?? []) as unknown) as AdsBanner[]);
+    setLoading(false);
+  };
+
+  useEffect(() => { void load(); }, []);
+
+  const handleUpload = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!file) { toast.error("Seleccioná una imagen"); return; }
+    if (!file.type.startsWith("image/")) { toast.error("El archivo debe ser una imagen"); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error("Máximo 5 MB"); return; }
+
+    setUploading(true);
+    const ext = file.name.split(".").pop() ?? "jpg";
+    const path = `${crypto.randomUUID()}.${ext}`;
+
+    const { error: upErr } = await supabase.storage.from("banners").upload(path, file, {
+      cacheControl: "3600",
+      upsert: false,
+    });
+    if (upErr) {
+      toast.error("Error subiendo imagen: " + upErr.message);
+      setUploading(false);
+      return;
+    }
+    const { data: pub } = supabase.storage.from("banners").getPublicUrl(path);
+
+    const { error: insErr } = await supabase.from("ads_banners" as never).insert({
+      image_url: pub.publicUrl,
+      link_url: link.trim() || null,
+      title: title.trim() || null,
+      sort_order: Number(order) || 0,
+      is_active: true,
+    } as never);
+    setUploading(false);
+    if (insErr) {
+      toast.error("Error guardando banner: " + insErr.message);
+      return;
+    }
+    toast.success("Banner publicado");
+    setTitle(""); setLink(""); setOrder("0"); setFile(null);
+    const input = document.getElementById("banner-file") as HTMLInputElement | null;
+    if (input) input.value = "";
+    void load();
+  };
+
+  const toggleActive = async (b: AdsBanner) => {
+    const { error } = await supabase
+      .from("ads_banners" as never)
+      .update({ is_active: !b.is_active } as never)
+      .eq("id", b.id);
+    if (error) { toast.error(error.message); return; }
+    void load();
+  };
+
+  const updateOrder = async (b: AdsBanner, value: string) => {
+    const n = Number(value);
+    if (Number.isNaN(n)) return;
+    const { error } = await supabase
+      .from("ads_banners" as never)
+      .update({ sort_order: n } as never)
+      .eq("id", b.id);
+    if (error) toast.error(error.message);
+    else void load();
+  };
+
+  const remove = async (b: AdsBanner) => {
+    if (!confirm("¿Eliminar este banner? Esta acción no se puede deshacer.")) return;
+    // Intentar borrar el archivo del storage
+    const marker = "/banners/";
+    const i = b.image_url.indexOf(marker);
+    if (i >= 0) {
+      const path = b.image_url.substring(i + marker.length);
+      await supabase.storage.from("banners").remove([path]);
+    }
+    const { error } = await supabase.from("ads_banners" as never).delete().eq("id", b.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Banner eliminado");
+    void load();
+  };
+
+  return (
+    <>
+      <div className="section-label !mt-0">Nuevo banner</div>
+      <form onSubmit={handleUpload} className="card-base flex flex-col gap-2 mb-5">
+        <label className="field-label">Imagen (JPG/PNG/WebP — recomendado 1600×700)</label>
+        <input
+          id="banner-file"
+          type="file"
+          accept="image/*"
+          className="field-input"
+          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+        />
+        <label className="field-label mt-2">Título (opcional)</label>
+        <input
+          type="text"
+          className="field-input"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Ej: Promo Mundial"
+        />
+        <label className="field-label mt-2">Enlace (opcional)</label>
+        <input
+          type="url"
+          className="field-input"
+          value={link}
+          onChange={(e) => setLink(e.target.value)}
+          placeholder="https://..."
+        />
+        <label className="field-label mt-2">Orden</label>
+        <input
+          type="number"
+          className="field-input"
+          value={order}
+          onChange={(e) => setOrder(e.target.value)}
+        />
+        <button type="submit" className="btn-gold mt-2" disabled={uploading}>
+          {uploading ? "Subiendo…" : "Publicar banner"}
+        </button>
+      </form>
+
+      <div className="section-label">Banners publicados</div>
+      {loading ? (
+        <div className="card-base text-sm text-muted-foreground">Cargando…</div>
+      ) : banners.length === 0 ? (
+        <div className="card-base text-sm text-muted-foreground text-center py-6">
+          Sin banners aún. Subí el primero arriba ☝️
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {banners.map((b) => (
+            <div key={b.id} className="card-base">
+              <img src={b.image_url} alt={b.title ?? "Banner"} className="banner-thumb mb-2" />
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`tag ${b.is_active ? "tag-success" : "tag-danger"}`}>
+                  {b.is_active ? "Activo" : "Inactivo"}
+                </span>
+                {b.title && <span className="text-sm font-bold">{b.title}</span>}
+                {b.link_url && (
+                  <a href={b.link_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline truncate max-w-[200px]">
+                    {b.link_url}
+                  </a>
+                )}
+              </div>
+              <div className="flex items-center gap-2 mt-3 flex-wrap">
+                <label className="text-xs text-muted-foreground">Orden:</label>
+                <input
+                  type="number"
+                  defaultValue={b.sort_order}
+                  onBlur={(e) => updateOrder(b, e.target.value)}
+                  className="field-input !w-20 !py-1"
+                />
+                <button type="button" className="btn-mini" onClick={() => toggleActive(b)}>
+                  {b.is_active ? "Desactivar" : "Activar"}
+                </button>
+                <button type="button" className="btn-mini btn-role-action is-danger" onClick={() => remove(b)}>
+                  Eliminar
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
   );
 }

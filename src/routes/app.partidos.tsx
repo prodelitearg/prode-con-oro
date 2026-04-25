@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { MatchCard, type MatchData } from "@/components/prodelite/MatchCard";
+import { BannerCarousel } from "@/components/prodelite/BannerCarousel";
 
 export const Route = createFileRoute("/app/partidos")({
   head: () => ({
@@ -42,6 +43,7 @@ function PartidosPage() {
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
   const [savingState, setSavingState] = useState(false);
+  const [leagueChosen, setLeagueChosen] = useState(false);
 
   // Cargar torneos + matchdays una vez
   useEffect(() => {
@@ -58,9 +60,6 @@ function PartidosPage() {
       const tournamentsList = (ts ?? []) as TournamentRow[];
       setTournaments(tournamentsList);
       setMatchdays((mds ?? []) as MatchdayRow[]);
-      if (tournamentsList.length && !activeTournament) {
-        setActiveTournament(tournamentsList[0].id);
-      }
       setLoading(false);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -68,12 +67,12 @@ function PartidosPage() {
 
   // Filtrar matchdays por liga activa y elegir la primera por defecto
   const filteredMatchdays = useMemo(
-    () => matchdays.filter((m) => m.tournament_id === activeTournament),
+    () => (activeTournament ? matchdays.filter((m) => m.tournament_id === activeTournament) : []),
     [matchdays, activeTournament]
   );
 
   useEffect(() => {
-    if (filteredMatchdays.length > 0) {
+    if (leagueChosen && filteredMatchdays.length > 0) {
       setActiveMd((curr) =>
         curr && filteredMatchdays.some((m) => m.id === curr) ? curr : filteredMatchdays[0].id
       );
@@ -81,7 +80,7 @@ function PartidosPage() {
       setActiveMd(null);
       setMatches([]);
     }
-  }, [filteredMatchdays]);
+  }, [filteredMatchdays, leagueChosen]);
 
   // Cargar matches + predicciones del usuario al cambiar matchday
   useEffect(() => {
@@ -161,6 +160,9 @@ function PartidosPage() {
 
   return (
     <div className="app-wrap">
+      {/* Hero carrusel publicitario */}
+      <BannerCarousel />
+
       {/* Selector de liga */}
       <div className="mb-2">
         <label htmlFor="league" className="field-label">Liga</label>
@@ -168,18 +170,30 @@ function PartidosPage() {
           id="league"
           className="field-input"
           value={activeTournament}
-          onChange={(e) => setActiveTournament(e.target.value)}
+          onChange={(e) => {
+            setActiveTournament(e.target.value);
+            setLeagueChosen(Boolean(e.target.value));
+          }}
           disabled={loading || tournaments.length === 0}
         >
+          <option value="">Seleccioná una liga…</option>
           {tournaments.map((t) => (
             <option key={t.id} value={t.id}>{t.name}</option>
           ))}
         </select>
       </div>
 
+      {/* Estado vacío cuando no hay liga elegida */}
+      {!leagueChosen && !loading && (
+        <div className="league-empty-state">
+          <span className="icon" aria-hidden>⚽</span>
+          Elegí una liga arriba para ver los partidos disponibles.
+        </div>
+      )}
+
       {/* Selector de fechas */}
-      {filteredMatchdays.length > 0 && (
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-3 -mx-4 px-4 bg-navy-2 border-b border-border/40">
+      {leagueChosen && filteredMatchdays.length > 0 && (
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-3 -mx-4 px-4 bg-navy-2 border-b border-border/40 matches-fade-in">
           {filteredMatchdays.map((md) => {
             const date = new Date(md.starts_at);
             const day = String(date.getDate()).padStart(2, "0");
@@ -201,9 +215,9 @@ function PartidosPage() {
       )}
 
       {/* Pozo */}
-      {activeMatchday && (
+      {leagueChosen && activeMatchday && (
         <div
-          className="mt-3 mb-3 flex items-center justify-between rounded-xl border border-primary/25 px-4 py-3"
+          className="mt-3 mb-3 flex items-center justify-between rounded-xl border border-primary/25 px-4 py-3 matches-fade-in"
           style={{
             background: "linear-gradient(135deg, var(--card), var(--navy-deep))",
           }}
@@ -226,8 +240,9 @@ function PartidosPage() {
       )}
 
       {/* Partidos */}
-      <div className="mt-2">
-        {!loading && matches.length === 0 && (
+      {leagueChosen && (
+      <div className="mt-2 matches-fade-in" key={activeMd ?? "none"}>
+        {!loading && activeMd && matches.length === 0 && (
           <div className="card-base text-center text-sm text-muted-foreground py-6">
             Los partidos de esta fecha se cargarán próximamente ⚽
           </div>
@@ -250,8 +265,9 @@ function PartidosPage() {
           </div>
         ))}
       </div>
+      )}
 
-      {matches.length > 0 && (
+      {leagueChosen && matches.length > 0 && (
         <button
           type="button"
           className={`save-fab ${saved ? "is-saved" : ""}`}
