@@ -55,7 +55,18 @@ function SuperPanel() {
     setPendingPurchases(count ?? 0);
   };
 
-  useEffect(() => { void loadPendingPurchases(); }, []);
+  useEffect(() => {
+    void loadPendingPurchases();
+    const channel = supabase
+      .channel("super-purchases-bell")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "credit_purchase_requests" },
+        () => { void loadPendingPurchases(); },
+      )
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, []);
 
   const handleLogout = async () => {
     await signOut();
@@ -434,6 +445,13 @@ function Torneos() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [resultDrafts, setResultDrafts] = useState<Record<string, { h: string; a: string }>>({});
   const [resultBusy, setResultBusy] = useState<string | null>(null);
+  const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<{
+    home_team: string; home_short: string; home_color: string;
+    away_team: string; away_short: string; away_color: string;
+    kickoff: string;
+  } | null>(null);
+  const [editBusy, setEditBusy] = useState(false);
   const [selTour, setSelTour] = useState<string | null>(null);
   const [selMd, setSelMd] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -590,6 +608,48 @@ function Torneos() {
     if (selMd) void reloadMatches(selMd);
   };
 
+  const toLocalInput = (iso: string) => {
+    const d = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+  const startEditMatch = (m: Match) => {
+    setEditingMatchId(m.id);
+    setEditDraft({
+      home_team: m.home_team,
+      home_short: m.home_short,
+      home_color: m.home_color,
+      away_team: m.away_team,
+      away_short: m.away_short,
+      away_color: m.away_color,
+      kickoff: toLocalInput(m.kickoff),
+    });
+  };
+  const cancelEditMatch = () => { setEditingMatchId(null); setEditDraft(null); };
+  const saveEditMatch = async (m: Match) => {
+    if (!editDraft) return;
+    if (!editDraft.home_team.trim() || !editDraft.away_team.trim()) return toast.error("Nombres de equipos requeridos");
+    if (!editDraft.kickoff) return toast.error("Hora del partido requerida");
+    setEditBusy(true);
+    const { error } = await supabase
+      .from("matches")
+      .update({
+        home_team: editDraft.home_team.trim().slice(0, 60),
+        home_short: (editDraft.home_short || editDraft.home_team).trim().toUpperCase().slice(0, 4),
+        home_color: editDraft.home_color,
+        away_team: editDraft.away_team.trim().slice(0, 60),
+        away_short: (editDraft.away_short || editDraft.away_team).trim().toUpperCase().slice(0, 4),
+        away_color: editDraft.away_color,
+        kickoff: new Date(editDraft.kickoff).toISOString(),
+      })
+      .eq("id", m.id);
+    setEditBusy(false);
+    if (error) return toast.error(error.message);
+    toast.success("Partido actualizado");
+    cancelEditMatch();
+    if (selMd) void reloadMatches(selMd);
+  };
+
   return (
     <>
       <div className="section-label !mt-0">Torneos</div>
@@ -666,11 +726,45 @@ function Torneos() {
                 <div className="text-sm font-bold text-foreground flex-1">
                   {m.home_team} <span className="text-muted-foreground">vs</span> {m.away_team}
                 </div>
-                <button type="button" className="btn-mini is-danger" onClick={() => deleteMatch(m)}>×</button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {m.status === "finished" ? (
+                    <span className="tag tag-success">Ver resultado</span>
+                  ) : editingMatchId === m.id ? (
+                    <button type="button" className="btn-mini" onClick={cancelEditMatch}>Cancelar</button>
+                  ) : (
+                    <button type="button" className="btn-mini" onClick={() => startEditMatch(m)}>Modificar</button>
+                  )}
+                  <button type="button" className="btn-mini is-danger" onClick={() => deleteMatch(m)}>×</button>
+                </div>
               </div>
               <div className="text-[0.7rem] text-muted-foreground mt-1 mb-2">
                 {new Date(m.kickoff).toLocaleString("es-AR")} · {m.status === "finished" ? <span className="text-success font-bold">Finalizado</span> : <span>Pendiente</span>}
               </div>
+              {editingMatchId === m.id && editDraft && m.status !== "finished" && (
+                <div className="rounded-lg border border-primary/30 bg-card-2 p-3 mb-2 grid grid-cols-2 gap-2">
+                  <input className="field-input" placeholder="Local" value={editDraft.home_team} maxLength={60}
+                    onChange={(e) => setEditDraft((d) => d ? { ...d, home_team: e.target.value } : d)} />
+                  <input className="field-input" placeholder="Visitante" value={editDraft.away_team} maxLength={60}
+                    onChange={(e) => setEditDraft((d) => d ? { ...d, away_team: e.target.value } : d)} />
+                  <input className="field-input" placeholder="Sigla local" value={editDraft.home_short} maxLength={4}
+                    onChange={(e) => setEditDraft((d) => d ? { ...d, home_short: e.target.value } : d)} />
+                  <input className="field-input" placeholder="Sigla visitante" value={editDraft.away_short} maxLength={4}
+                    onChange={(e) => setEditDraft((d) => d ? { ...d, away_short: e.target.value } : d)} />
+                  <label className="text-[0.7rem] text-muted-foreground flex items-center gap-2">Color local
+                    <input type="color" value={editDraft.home_color}
+                      onChange={(e) => setEditDraft((d) => d ? { ...d, home_color: e.target.value } : d)} />
+                  </label>
+                  <label className="text-[0.7rem] text-muted-foreground flex items-center gap-2">Color visitante
+                    <input type="color" value={editDraft.away_color}
+                      onChange={(e) => setEditDraft((d) => d ? { ...d, away_color: e.target.value } : d)} />
+                  </label>
+                  <input className="field-input col-span-2" type="datetime-local" value={editDraft.kickoff}
+                    onChange={(e) => setEditDraft((d) => d ? { ...d, kickoff: e.target.value } : d)} />
+                  <button type="button" className="btn-gold !py-2 col-span-2" disabled={editBusy} onClick={() => saveEditMatch(m)}>
+                    {editBusy ? "Guardando…" : "Guardar cambios"}
+                  </button>
+                </div>
+              )}
               <div className="flex flex-wrap items-center gap-2">
                 {m.status === "finished" ? (
                   <>

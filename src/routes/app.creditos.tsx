@@ -16,9 +16,9 @@ export const Route = createFileRoute("/app/creditos")({
 
 const PAQUETES = [
   { id: "starter", name: "Starter", creds: 100, bonus: 0, ars: 5000, price: "$5.000" },
-  { id: "plus", name: "Plus", creds: 300, bonus: 30, ars: 13500, price: "$13.500" },
-  { id: "pro", name: "Pro", creds: 500, bonus: 80, ars: 21000, price: "$21.000" },
-  { id: "full", name: "Full", creds: 1000, bonus: 200, ars: 40000, price: "$40.000" },
+  { id: "plus", name: "Plus", creds: 270, bonus: 30, ars: 13500, price: "$13.500" },
+  { id: "pro", name: "Pro", creds: 420, bonus: 80, ars: 21000, price: "$21.000" },
+  { id: "full", name: "Full", creds: 800, bonus: 200, ars: 40000, price: "$40.000" },
 ] as const;
 
 function CreditosPage() {

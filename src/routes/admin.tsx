@@ -141,7 +141,22 @@ function AdminPanel() {
 
   useEffect(() => {
     void loadPendingPurchases();
-  }, [loadPendingPurchases]);
+    if (!user?.id) return;
+    const channel = supabase
+      .channel(`admin-purchases-bell-${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "credit_purchase_requests",
+          filter: `admin_id=eq.${user.id}`,
+        },
+        () => { void loadPendingPurchases(); },
+      )
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [loadPendingPurchases, user?.id]);
 
   const handleLogout = async () => {
     await signOut();
