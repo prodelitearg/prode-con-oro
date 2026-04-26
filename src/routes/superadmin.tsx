@@ -55,7 +55,18 @@ function SuperPanel() {
     setPendingPurchases(count ?? 0);
   };
 
-  useEffect(() => { void loadPendingPurchases(); }, []);
+  useEffect(() => {
+    void loadPendingPurchases();
+    const channel = supabase
+      .channel("super-purchases-bell")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "credit_purchase_requests" },
+        () => { void loadPendingPurchases(); },
+      )
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, []);
 
   const handleLogout = async () => {
     await signOut();
