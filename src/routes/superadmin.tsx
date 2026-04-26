@@ -608,6 +608,48 @@ function Torneos() {
     if (selMd) void reloadMatches(selMd);
   };
 
+  const toLocalInput = (iso: string) => {
+    const d = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+  const startEditMatch = (m: Match) => {
+    setEditingMatchId(m.id);
+    setEditDraft({
+      home_team: m.home_team,
+      home_short: m.home_short,
+      home_color: m.home_color,
+      away_team: m.away_team,
+      away_short: m.away_short,
+      away_color: m.away_color,
+      kickoff: toLocalInput(m.kickoff),
+    });
+  };
+  const cancelEditMatch = () => { setEditingMatchId(null); setEditDraft(null); };
+  const saveEditMatch = async (m: Match) => {
+    if (!editDraft) return;
+    if (!editDraft.home_team.trim() || !editDraft.away_team.trim()) return toast.error("Nombres de equipos requeridos");
+    if (!editDraft.kickoff) return toast.error("Hora del partido requerida");
+    setEditBusy(true);
+    const { error } = await supabase
+      .from("matches")
+      .update({
+        home_team: editDraft.home_team.trim().slice(0, 60),
+        home_short: (editDraft.home_short || editDraft.home_team).trim().toUpperCase().slice(0, 4),
+        home_color: editDraft.home_color,
+        away_team: editDraft.away_team.trim().slice(0, 60),
+        away_short: (editDraft.away_short || editDraft.away_team).trim().toUpperCase().slice(0, 4),
+        away_color: editDraft.away_color,
+        kickoff: new Date(editDraft.kickoff).toISOString(),
+      })
+      .eq("id", m.id);
+    setEditBusy(false);
+    if (error) return toast.error(error.message);
+    toast.success("Partido actualizado");
+    cancelEditMatch();
+    if (selMd) void reloadMatches(selMd);
+  };
+
   return (
     <>
       <div className="section-label !mt-0">Torneos</div>
