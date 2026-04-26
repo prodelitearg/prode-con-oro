@@ -726,11 +726,45 @@ function Torneos() {
                 <div className="text-sm font-bold text-foreground flex-1">
                   {m.home_team} <span className="text-muted-foreground">vs</span> {m.away_team}
                 </div>
-                <button type="button" className="btn-mini is-danger" onClick={() => deleteMatch(m)}>×</button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {m.status === "finished" ? (
+                    <span className="tag tag-success">Ver resultado</span>
+                  ) : editingMatchId === m.id ? (
+                    <button type="button" className="btn-mini" onClick={cancelEditMatch}>Cancelar</button>
+                  ) : (
+                    <button type="button" className="btn-mini" onClick={() => startEditMatch(m)}>Modificar</button>
+                  )}
+                  <button type="button" className="btn-mini is-danger" onClick={() => deleteMatch(m)}>×</button>
+                </div>
               </div>
               <div className="text-[0.7rem] text-muted-foreground mt-1 mb-2">
                 {new Date(m.kickoff).toLocaleString("es-AR")} · {m.status === "finished" ? <span className="text-success font-bold">Finalizado</span> : <span>Pendiente</span>}
               </div>
+              {editingMatchId === m.id && editDraft && m.status !== "finished" && (
+                <div className="rounded-lg border border-primary/30 bg-card-2 p-3 mb-2 grid grid-cols-2 gap-2">
+                  <input className="field-input" placeholder="Local" value={editDraft.home_team} maxLength={60}
+                    onChange={(e) => setEditDraft((d) => d ? { ...d, home_team: e.target.value } : d)} />
+                  <input className="field-input" placeholder="Visitante" value={editDraft.away_team} maxLength={60}
+                    onChange={(e) => setEditDraft((d) => d ? { ...d, away_team: e.target.value } : d)} />
+                  <input className="field-input" placeholder="Sigla local" value={editDraft.home_short} maxLength={4}
+                    onChange={(e) => setEditDraft((d) => d ? { ...d, home_short: e.target.value } : d)} />
+                  <input className="field-input" placeholder="Sigla visitante" value={editDraft.away_short} maxLength={4}
+                    onChange={(e) => setEditDraft((d) => d ? { ...d, away_short: e.target.value } : d)} />
+                  <label className="text-[0.7rem] text-muted-foreground flex items-center gap-2">Color local
+                    <input type="color" value={editDraft.home_color}
+                      onChange={(e) => setEditDraft((d) => d ? { ...d, home_color: e.target.value } : d)} />
+                  </label>
+                  <label className="text-[0.7rem] text-muted-foreground flex items-center gap-2">Color visitante
+                    <input type="color" value={editDraft.away_color}
+                      onChange={(e) => setEditDraft((d) => d ? { ...d, away_color: e.target.value } : d)} />
+                  </label>
+                  <input className="field-input col-span-2" type="datetime-local" value={editDraft.kickoff}
+                    onChange={(e) => setEditDraft((d) => d ? { ...d, kickoff: e.target.value } : d)} />
+                  <button type="button" className="btn-gold !py-2 col-span-2" disabled={editBusy} onClick={() => saveEditMatch(m)}>
+                    {editBusy ? "Guardando…" : "Guardar cambios"}
+                  </button>
+                </div>
+              )}
               <div className="flex flex-wrap items-center gap-2">
                 {m.status === "finished" ? (
                   <>
