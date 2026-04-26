@@ -445,6 +445,13 @@ function Torneos() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [resultDrafts, setResultDrafts] = useState<Record<string, { h: string; a: string }>>({});
   const [resultBusy, setResultBusy] = useState<string | null>(null);
+  const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<{
+    home_team: string; home_short: string; home_color: string;
+    away_team: string; away_short: string; away_color: string;
+    kickoff: string;
+  } | null>(null);
+  const [editBusy, setEditBusy] = useState(false);
   const [selTour, setSelTour] = useState<string | null>(null);
   const [selMd, setSelMd] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
