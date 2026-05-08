@@ -233,7 +233,7 @@ function PartidosPage() {
           ))}
         </select>
       </div>
-
+      {!loading && <BannerCarousel />}
       {/* Estado vacío cuando no hay liga elegida */}
       {!leagueChosen && !loading && (
         <div className="league-empty-state">
